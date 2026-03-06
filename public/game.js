@@ -633,6 +633,9 @@
   playAgainBtn.addEventListener("click", newGame);
   window.addEventListener("resize", resize);
 
+  // Init board early so setTheme -> drawBoard doesn't crash on empty array
+  initBoard();
+
   // Load preferences
   const savedTheme = localStorage.getItem("blockdoku_theme");
   setTheme(savedTheme ? savedTheme === "dark" : true);
@@ -643,9 +646,8 @@
     soundBtn.textContent = soundOn ? "🔊" : "🔇";
   }
 
-  // Start
+  // Start — loadState overwrites board if saved data exists
   if (!loadState()) {
-    initBoard();
     dealPieces();
   }
   resize();
