@@ -1,0 +1,257 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --grid-bg: #0f3460;
+  --grid-line: #1a4a7a;
+  --cell-empty: #162447;
+  --cell-hover-valid: rgba(76, 201, 240, 0.3);
+  --cell-hover-invalid: rgba(255, 71, 87, 0.3);
+  --text: #e2e8f0;
+  --text-dim: #8892a4;
+  --accent: #4cc9f0;
+  --piece-1: #f72585;
+  --piece-2: #7209b7;
+  --piece-3: #3a0ca3;
+  --piece-4: #4361ee;
+  --piece-5: #4cc9f0;
+  --piece-6: #06d6a0;
+  --piece-7: #ffd166;
+  --piece-8: #ef476f;
+  --clear-flash: rgba(255, 255, 255, 0.8);
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] {
+  --bg: #f0f4f8;
+  --surface: #ffffff;
+  --grid-bg: #e2e8f0;
+  --grid-line: #cbd5e1;
+  --cell-empty: #edf2f7;
+  --cell-hover-valid: rgba(66, 153, 225, 0.3);
+  --cell-hover-invalid: rgba(245, 101, 101, 0.3);
+  --text: #1a202c;
+  --text-dim: #718096;
+  --accent: #3182ce;
+  --clear-flash: rgba(66, 153, 225, 0.5);
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#app {
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  gap: 12px;
+  height: 100dvh;
+}
+
+header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+}
+
+#score-area {
+  display: flex;
+  gap: 16px;
+}
+
+.score-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--surface);
+  padding: 4px 16px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.score-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+
+.score-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+#board-container {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#board {
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  touch-action: none;
+}
+
+#pieces-tray {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 100px;
+  flex: 1;
+}
+
+.piece-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: grab;
+  touch-action: none;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.piece-slot:active {
+  cursor: grabbing;
+}
+
+.piece-slot.dragging {
+  opacity: 0.4;
+  transform: scale(0.9);
+}
+
+.piece-slot.used {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.piece-slot canvas {
+  pointer-events: none;
+}
+
+#game-over-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  backdrop-filter: blur(4px);
+}
+
+#game-over-overlay.hidden {
+  display: none;
+}
+
+#game-over-modal {
+  background: var(--surface);
+  padding: 40px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+#game-over-modal h2 {
+  font-size: 2rem;
+  margin-bottom: 12px;
+  color: var(--accent);
+}
+
+#game-over-modal p {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
+
+#play-again-btn {
+  margin-top: 20px;
+  padding: 12px 40px;
+  font-size: 1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+#play-again-btn:active {
+  transform: scale(0.95);
+}
+
+footer {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+footer button {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 1.2rem;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform 0.1s ease;
+}
+
+footer button:active {
+  transform: scale(0.9);
+}
+
+/* Score pop animation */
+@keyframes scorePop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); color: var(--accent); }
+  100% { transform: scale(1); }
+}
+
+.score-pop {
+  animation: scorePop 0.3s ease;
+}
+
+/* Floating score text */
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-40px); }
+}
+
+.float-score {
+  position: fixed;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--accent);
+  pointer-events: none;
+  z-index: 50;
+  animation: floatUp 0.8s ease forwards;
+}

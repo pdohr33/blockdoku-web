@@ -1,0 +1,10 @@
+{
+  "name": "blockdoku-web",
+  "version": "1.0.0",
+  "description": "BlockDoku - Block Puzzle Game for the Web",
+  "scripts": {
+    "dev": "npx serve public",
+    "build": "echo 'Static site - no build needed'"
+  },
+  "private": true
+}
