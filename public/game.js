@@ -464,7 +464,6 @@
         if (board[r][c] !== 0) {
           const ci = (board[r][c] - 1) % CELL_COLORS.length;
           const color = CELL_COLORS[ci];
-          const lightColor = CELL_COLORS_LIGHT[ci];
 
           // Main fill
           ctx.fillStyle = color;
@@ -960,8 +959,9 @@
     stats.totalLines += gameStats.linesCleared;
     if (score > stats.bestScore) stats.bestScore = score;
 
-    // Streak tracking
-    const today = new Date().toISOString().slice(0, 10);
+    // Streak tracking (use local date, not UTC, to avoid midnight timezone bugs)
+    const d = new Date();
+    const today = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     if (stats.lastPlayDate) {
       const last = new Date(stats.lastPlayDate);
       const now = new Date(today);
