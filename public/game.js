@@ -73,6 +73,7 @@
   let darkMode = true;
   let comboCount = 0;
   let gameActive = true;
+  let initialized = false;
 
   // Per-game stats
   let gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
@@ -231,18 +232,22 @@
   // ============================================================
   // SIZING
   // ============================================================
-  let cellSize, boardPx;
+  let cellSize = 36; // safe default until resize() runs
+  let boardPx = 324; // 36 * 9
 
   function resize() {
-    const headerH = document.getElementById("header").offsetHeight;
-    const toolbarH = document.getElementById("toolbar").offsetHeight;
+    const headerH = document.getElementById("header").offsetHeight || 50;
+    const toolbarH = document.getElementById("toolbar").offsetHeight || 52;
     const appPad = 16 + 8; // padding + gaps
     const trayMinH = 80;
-    const availH = window.innerHeight - headerH - toolbarH - appPad - trayMinH - 20;
-    const availW = Math.min(window.innerWidth - 44, 480 - 32); // account for wrapper padding
+    const vh = window.innerHeight || document.documentElement.clientHeight || 700;
+    const vw = window.innerWidth || document.documentElement.clientWidth || 375;
+
+    const availH = vh - headerH - toolbarH - appPad - trayMinH - 20;
+    const availW = Math.min(vw - 44, 480 - 32); // account for wrapper padding
 
     boardPx = Math.min(availW, availH);
-    boardPx = Math.max(boardPx, 200); // minimum
+    boardPx = Math.max(boardPx, 180); // minimum
     boardPx = Math.floor(boardPx / GRID) * GRID;
     cellSize = boardPx / GRID;
 
@@ -558,14 +563,15 @@
         const cols = maxC - minC + 1;
 
         // Dynamic cell size based on available space
-        const slotW = slot.clientWidth - 16;
-        const slotH = slot.clientHeight - 16;
+        const slotW = Math.max(slot.clientWidth - 16, 60);
+        const slotH = Math.max(slot.clientHeight - 16, 50);
+        const cs = cellSize || 36;
         const pCellSize = Math.min(
           Math.floor(slotW / cols),
           Math.floor(slotH / rows),
-          Math.floor(cellSize * 0.65)
+          Math.floor(cs * 0.65)
         );
-        const finalCellSize = Math.max(pCellSize, 12);
+        const finalCellSize = Math.max(pCellSize || 14, 14);
 
         pCanvas.width = cols * finalCellSize;
         pCanvas.height = rows * finalCellSize;
@@ -993,7 +999,10 @@
   // ============================================================
   initBoard();
 
-  // Load preferences
+  // IMPORTANT: resize first so cellSize/boardPx are valid before any drawing
+  resize();
+
+  // Load preferences (setTheme calls drawBoard which needs valid cellSize)
   const savedTheme = localStorage.getItem("blockdoku_theme");
   setTheme(savedTheme ? savedTheme === "dark" : true);
 
@@ -1010,11 +1019,13 @@
     localStorage.setItem("blockdoku_played", "1");
   }
 
-  // Start
+  // Load saved game or deal fresh pieces, then ensure layout is correct
   if (!loadState()) {
     dealPieces();
   }
+  // Second resize to pick up any layout shifts from theme/loadState
   resize();
+  initialized = true;
 
   // Start particle animation loop
   animLoop();
