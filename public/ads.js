@@ -13,7 +13,7 @@
 
 const ADS_CONFIG = {
   // Set this to your AdSense publisher ID (e.g., "ca-pub-1234567890123456")
-  publisherId: "",
+  publisherId: "ca-pub-2624738239425269",
 
   // Ad unit slot IDs from your AdSense dashboard
   bannerSlot: "",       // Bottom anchor banner
