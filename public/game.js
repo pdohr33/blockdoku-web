@@ -413,6 +413,10 @@
     const gridLine = style.getPropertyValue("--grid-line").trim();
     const cellEmpty = style.getPropertyValue("--cell-empty").trim();
 
+    // IMPORTANT: fully clear the canvas first to remove any ghost artifacts
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+
     // Background
     ctx.fillStyle = gridBg;
     ctx.beginPath();
@@ -475,44 +479,49 @@
   }
 
   function drawGhost(piece, row, col, valid) {
-    drawBoard();
-    if (valid) {
-      const ci = (piece.colorIdx - 1) % CELL_COLORS.length;
-      const color = CELL_COLORS[ci];
-      for (const [dr, dc] of piece.cells) {
-        const r = row + dr, c = col + dc;
-        if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
-        const x = c * cellSize, y = r * cellSize;
+    drawBoard(); // clears canvas and redraws board
 
-        // Ghost fill with pulse
-        ctx.fillStyle = color;
-        ctx.globalAlpha = 0.45;
-        ctx.beginPath();
-        roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
-        ctx.fill();
+    // Save and restore context state to prevent alpha/style leaks
+    ctx.save();
+    try {
+      if (valid) {
+        const ci = (piece.colorIdx - 1) % CELL_COLORS.length;
+        const color = CELL_COLORS[ci];
+        for (const [dr, dc] of piece.cells) {
+          const r = row + dr, c = col + dc;
+          if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
+          const x = c * cellSize, y = r * cellSize;
 
-        // Ghost border
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.6;
-        ctx.beginPath();
-        roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
-        ctx.stroke();
+          // Ghost fill
+          ctx.fillStyle = color;
+          ctx.globalAlpha = 0.45;
+          ctx.beginPath();
+          roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
+          ctx.fill();
 
-        ctx.globalAlpha = 1;
+          // Ghost border
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = 0.6;
+          ctx.beginPath();
+          roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
+          ctx.stroke();
+        }
+      } else {
+        const style = getComputedStyle(document.documentElement);
+        const hoverColor = style.getPropertyValue("--cell-hover-invalid").trim();
+        for (const [dr, dc] of piece.cells) {
+          const r = row + dr, c = col + dc;
+          if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
+          const x = c * cellSize, y = r * cellSize;
+          ctx.fillStyle = hoverColor;
+          ctx.beginPath();
+          roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
+          ctx.fill();
+        }
       }
-    } else {
-      const style = getComputedStyle(document.documentElement);
-      const hoverColor = style.getPropertyValue("--cell-hover-invalid").trim();
-      for (const [dr, dc] of piece.cells) {
-        const r = row + dr, c = col + dc;
-        if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
-        const x = c * cellSize, y = r * cellSize;
-        ctx.fillStyle = hoverColor;
-        ctx.beginPath();
-        roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
-        ctx.fill();
-      }
+    } finally {
+      ctx.restore(); // always restores globalAlpha, fillStyle, etc.
     }
   }
 
@@ -764,6 +773,33 @@
       const t = e.changedTouches[0];
       endDrag(t.clientX, t.clientY);
     }
+  });
+
+  // touchcancel fires when the browser hijacks the touch (scroll, gesture, etc.)
+  window.addEventListener("touchcancel", () => {
+    cancelDrag();
+  });
+
+  // Safety: if drag state gets stuck, clean it up
+  function cancelDrag() {
+    if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+    if (dragIdx >= 0) {
+      const slot = tray.querySelectorAll(".piece-slot")[dragIdx];
+      if (slot) slot.classList.remove("dragging");
+    }
+    dragPiece = null;
+    dragIdx = -1;
+    lastGhostRow = -999;
+    lastGhostCol = -999;
+    drawBoard();
+  }
+
+  // If window loses focus mid-drag, cancel it
+  window.addEventListener("blur", () => {
+    if (dragPiece) cancelDrag();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && dragPiece) cancelDrag();
   });
 
   // ============================================================
