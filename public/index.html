@@ -21,6 +21,13 @@
 </head>
 <body>
   <div id="app">
+    <!-- Play Store Banner (always visible, no AdSense needed) -->
+    <div id="store-banner">
+      <a href="https://play.google.com/store/apps/details?id=com.dohrbusiness.blockpuzzle" target="_blank" rel="noopener" id="store-link">
+        <span id="store-text">📱 Get the Android app with more modes!</span>
+        <span id="store-cta">Install</span>
+      </a>
+    </div>
     <!-- Header -->
     <header id="header">
       <div id="header-left">
@@ -171,8 +178,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Ad: Interstitial overlay (shown between games) -->
+    <div id="ad-interstitial-overlay" class="modal-overlay hidden">
+      <div class="modal ad-interstitial-modal">
+        <div class="ad-interstitial-header">
+          <span class="ad-label">Advertisement</span>
+          <button id="ad-interstitial-close" class="modal-close" disabled>
+            <span id="ad-interstitial-timer">5</span>&times;
+          </button>
+        </div>
+        <div id="ad-interstitial-container"></div>
+      </div>
+    </div>
+
+    <!-- Ad: Bottom banner (sticky) -->
+    <div id="ad-banner-container" class="hidden"></div>
   </div>
 
+  <script src="ads.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

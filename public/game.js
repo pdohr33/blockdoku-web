@@ -824,7 +824,27 @@
       newBestBanner.classList.add("hidden");
     }
 
-    goOverlay.classList.remove("hidden");
+    // Try to show interstitial ad between games
+    const adShown = window.BlockDokuAds && window.BlockDokuAds.tryShowInterstitial();
+
+    // Show game over after ad (or immediately if no ad)
+    if (!adShown) {
+      goOverlay.classList.remove("hidden");
+    } else {
+      // Delay game over modal until ad is dismissed
+      const checkAdClosed = setInterval(() => {
+        const adOverlay = document.getElementById("ad-interstitial-overlay");
+        if (adOverlay && adOverlay.classList.contains("hidden")) {
+          clearInterval(checkAdClosed);
+          goOverlay.classList.remove("hidden");
+        }
+      }, 200);
+      // Safety timeout: show game over after 15 seconds regardless
+      setTimeout(() => {
+        clearInterval(checkAdClosed);
+        goOverlay.classList.remove("hidden");
+      }, 15000);
+    }
 
     // Save to lifetime stats
     updateLifetimeStats();
@@ -1026,6 +1046,11 @@
   // Second resize to pick up any layout shifts from theme/loadState
   resize();
   initialized = true;
+
+  // Initialize ads (no-op if no publisher ID configured)
+  if (window.BlockDokuAds) {
+    window.BlockDokuAds.init();
+  }
 
   // Start particle animation loop
   animLoop();

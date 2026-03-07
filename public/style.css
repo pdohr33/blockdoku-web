@@ -710,4 +710,109 @@ h1 {
 [data-theme="light"] #icon-sun { display: block; }
 [data-theme="light"] #icon-moon { display: none; }
 
+/* --- Play Store Cross-Promo Banner --- */
+#store-banner {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+#store-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.12));
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--text);
+  transition: all 0.15s ease;
+}
+
+#store-link:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(59, 130, 246, 0.2));
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+#store-text {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+#store-cta {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--success);
+  padding: 3px 10px;
+  border: 1px solid var(--success);
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* --- Ad: Bottom Banner --- */
+#ad-banner-container {
+  width: 100%;
+  max-width: 480px;
+  min-height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+#ad-banner-container.hidden {
+  display: none;
+}
+
+/* --- Ad: Interstitial --- */
+.ad-interstitial-modal {
+  max-width: 340px;
+  padding: 16px;
+}
+
+.ad-interstitial-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ad-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+}
+
+.ad-interstitial-header .modal-close {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+#ad-interstitial-timer {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+#ad-interstitial-container {
+  min-height: 250px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+/* --- Responsive: hide store banner on very short screens --- */
+@media (max-height: 580px) {
+  #store-banner { display: none; }
+}
+
 .hidden { display: none !important; }
