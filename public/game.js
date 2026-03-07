@@ -31,7 +31,7 @@
     [[0,0],[1,0],[0,1]],
     [[0,0],[1,0],[1,1]],
     [[0,0],[0,1],[1,1]],
-    [[0,0],[1,0],[0,1]],
+    [[1,0],[0,1],[1,1]],
     // Tetrominoes
     [[0,0],[1,0],[2,0],[3,0]],
     [[0,0],[0,1],[0,2],[0,3]],
@@ -74,6 +74,7 @@
   let comboCount = 0;
   let gameActive = true;
   let initialized = false;
+  let bestScoreAtGameStart = 0; // track pre-game best for "New Best!" check
 
   // Per-game stats
   let gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
@@ -182,6 +183,7 @@
         color,
       });
     }
+    ensureAnimRunning();
   }
 
   function spawnClearParticles(cellIndices) {
@@ -219,14 +221,28 @@
     fxCtx.globalAlpha = 1;
   }
 
-  // Animation loop for particles
+  // Animation loop for particles - only runs when particles exist (battery friendly)
   let animFrameId = null;
+  let animRunning = false;
+
   function animLoop() {
     if (particles.length > 0) {
       updateParticles();
       drawParticles();
+      animFrameId = requestAnimationFrame(animLoop);
+    } else {
+      // No particles left, stop the loop to save battery
+      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+      animRunning = false;
+      animFrameId = null;
     }
-    animFrameId = requestAnimationFrame(animLoop);
+  }
+
+  function ensureAnimRunning() {
+    if (!animRunning) {
+      animRunning = true;
+      animFrameId = requestAnimationFrame(animLoop);
+    }
   }
 
   // ============================================================
@@ -238,12 +254,16 @@
   function resize() {
     const headerH = document.getElementById("header").offsetHeight || 50;
     const toolbarH = document.getElementById("toolbar").offsetHeight || 52;
+    const storeBanner = document.getElementById("store-banner");
+    const storeBannerH = (storeBanner && storeBanner.offsetHeight) || 0;
+    const adBanner = document.getElementById("ad-banner-container");
+    const adBannerH = (adBanner && !adBanner.classList.contains("hidden")) ? (adBanner.offsetHeight || 0) : 0;
     const appPad = 16 + 8; // padding + gaps
     const trayMinH = 80;
     const vh = window.innerHeight || document.documentElement.clientHeight || 700;
     const vw = window.innerWidth || document.documentElement.clientWidth || 375;
 
-    const availH = vh - headerH - toolbarH - appPad - trayMinH - 20;
+    const availH = vh - headerH - toolbarH - storeBannerH - adBannerH - appPad - trayMinH - 20;
     const availW = Math.min(vw - 44, 480 - 32); // account for wrapper padding
 
     boardPx = Math.min(availW, availH);
@@ -261,6 +281,7 @@
     fxCanvas.style.width = boardPx + "px";
     fxCanvas.style.height = boardPx + "px";
 
+    refreshCachedStyles();
     drawBoard();
     renderPieces();
   }
@@ -407,11 +428,19 @@
   // ============================================================
   // DRAWING
   // ============================================================
-  function drawBoard() {
+  // Cache CSS custom property values (refreshed on theme change / resize)
+  let cachedStyles = { gridBg: "", gridLine: "", cellEmpty: "", hoverInvalid: "" };
+
+  function refreshCachedStyles() {
     const style = getComputedStyle(document.documentElement);
-    const gridBg = style.getPropertyValue("--grid-bg").trim();
-    const gridLine = style.getPropertyValue("--grid-line").trim();
-    const cellEmpty = style.getPropertyValue("--cell-empty").trim();
+    cachedStyles.gridBg = style.getPropertyValue("--grid-bg").trim();
+    cachedStyles.gridLine = style.getPropertyValue("--grid-line").trim();
+    cachedStyles.cellEmpty = style.getPropertyValue("--cell-empty").trim();
+    cachedStyles.hoverInvalid = style.getPropertyValue("--cell-hover-invalid").trim();
+  }
+
+  function drawBoard() {
+    const { gridBg, gridLine, cellEmpty } = cachedStyles;
 
     // IMPORTANT: fully clear the canvas first to remove any ghost artifacts
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -508,8 +537,7 @@
           ctx.stroke();
         }
       } else {
-        const style = getComputedStyle(document.documentElement);
-        const hoverColor = style.getPropertyValue("--cell-hover-invalid").trim();
+        const hoverColor = cachedStyles.hoverInvalid;
         for (const [dr, dc] of piece.cells) {
           const r = row + dr, c = col + dc;
           if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
@@ -660,12 +688,14 @@
 
   function moveGhost(clientX, clientY) {
     if (!ghostEl) return;
+    // Offset ghost above finger by 2 cells so piece is visible while dragging
+    const dragLift = cellSize * 2;
     ghostEl.style.left = (clientX - ghostEl.offsetWidth / 2) + "px";
-    ghostEl.style.top = (clientY - ghostEl.offsetHeight - 50) + "px";
+    ghostEl.style.top = (clientY - ghostEl.offsetHeight - dragLift) + "px";
 
     const rect = canvas.getBoundingClientRect();
     const bx = clientX - rect.left;
-    const by = clientY - rect.top - cellSize * 2;
+    const by = clientY - rect.top - dragLift;
 
     const col = Math.round(bx / cellSize - dragOffsetC);
     const row = Math.round(by / cellSize - dragOffsetR);
@@ -686,9 +716,10 @@
   function endDrag(clientX, clientY) {
     if (!dragPiece) return;
 
+    const dragLift = cellSize * 2;
     const rect = canvas.getBoundingClientRect();
     const bx = clientX - rect.left;
-    const by = clientY - rect.top - cellSize * 2;
+    const by = clientY - rect.top - dragLift;
 
     const col = Math.round(bx / cellSize - dragOffsetC);
     const row = Math.round(by / cellSize - dragOffsetR);
@@ -770,8 +801,13 @@
 
   window.addEventListener("touchend", (e) => {
     if (dragPiece) {
-      const t = e.changedTouches[0];
-      endDrag(t.clientX, t.clientY);
+      const t = e.changedTouches && e.changedTouches[0];
+      if (t) {
+        endDrag(t.clientX, t.clientY);
+      } else {
+        // Some Android WebViews fire touchend with empty changedTouches
+        cancelDrag();
+      }
     }
   });
 
@@ -846,7 +882,9 @@
   // ============================================================
   function gameOver() {
     sfxGameOver();
-    const isNewBest = score >= bestScore && score > 0;
+    // Compare against the best score from BEFORE this game started,
+    // not the one addScore() already updated mid-game
+    const isNewBest = score > bestScoreAtGameStart && score > 0;
 
     finalScoreEl.textContent = score;
     finalBestEl.textContent = bestScore;
@@ -891,6 +929,7 @@
     score = 0;
     comboCount = 0;
     gameActive = true;
+    bestScoreAtGameStart = bestScore; // snapshot before game begins
     gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
     scoreEl.textContent = "0";
     hideComboBadge();
@@ -961,6 +1000,7 @@
 
   function loadState() {
     bestScore = parseInt(localStorage.getItem("blockdoku_best") || "0");
+    bestScoreAtGameStart = bestScore;
     bestEl.textContent = bestScore;
 
     const saved = localStorage.getItem("blockdoku_state");
@@ -998,6 +1038,7 @@
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
     document.querySelector('meta[name="theme-color"]').setAttribute("content", dark ? "#0a0a1a" : "#f0f2f8");
     localStorage.setItem("blockdoku_theme", dark ? "dark" : "light");
+    refreshCachedStyles();
     drawBoard();
   }
 
@@ -1039,6 +1080,10 @@
   document.getElementById("stats-reset").addEventListener("click", () => {
     if (confirm("Reset all stats? This cannot be undone.")) {
       localStorage.removeItem("blockdoku_lifetime");
+      localStorage.removeItem("blockdoku_best");
+      bestScore = 0;
+      bestScoreAtGameStart = 0;
+      bestEl.textContent = "0";
       showStats();
     }
   });
@@ -1056,6 +1101,7 @@
   initBoard();
 
   // IMPORTANT: resize first so cellSize/boardPx are valid before any drawing
+  refreshCachedStyles();
   resize();
 
   // Load preferences (setTheme calls drawBoard which needs valid cellSize)
@@ -1088,6 +1134,6 @@
     window.BlockDokuAds.init();
   }
 
-  // Start particle animation loop
-  animLoop();
+  // Particle animation loop starts on-demand via ensureAnimRunning()
+  // No need to run at startup when there are no particles
 })();
