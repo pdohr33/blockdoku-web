@@ -2,46 +2,175 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>BlockDoku</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>BlockDoku - Block Puzzle Game</title>
+  <meta name="description" content="A satisfying block puzzle game. Place pieces, clear rows, columns, and boxes. How high can you score?">
+  <meta name="theme-color" content="#0a0a1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta property="og:title" content="BlockDoku - Block Puzzle Game">
+  <meta property="og:description" content="A satisfying block puzzle game. Place pieces, clear rows, columns, and boxes.">
+  <meta property="og:type" content="website">
+  <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="app">
-    <header>
-      <h1>BlockDoku</h1>
+    <!-- Header -->
+    <header id="header">
+      <div id="header-left">
+        <h1>BlockDoku</h1>
+        <div id="combo-badge" class="hidden">
+          <span id="combo-text">x2</span>
+        </div>
+      </div>
       <div id="score-area">
-        <div class="score-item">
+        <div class="score-box">
           <span class="score-label">Score</span>
           <span id="score" class="score-value">0</span>
         </div>
-        <div class="score-item">
+        <div class="score-box best">
           <span class="score-label">Best</span>
           <span id="best-score" class="score-value">0</span>
         </div>
       </div>
     </header>
 
-    <div id="board-container">
-      <canvas id="board" width="450" height="450"></canvas>
+    <!-- Board -->
+    <div id="board-wrapper">
+      <canvas id="board"></canvas>
+      <canvas id="fx-layer"></canvas>
     </div>
 
-    <div id="pieces-tray"></div>
+    <!-- Pieces Tray -->
+    <div id="pieces-tray">
+      <div class="piece-slot" data-idx="0"></div>
+      <div class="piece-slot" data-idx="1"></div>
+      <div class="piece-slot" data-idx="2"></div>
+    </div>
 
-    <div id="game-over-overlay" class="hidden">
-      <div id="game-over-modal">
+    <!-- Toolbar -->
+    <footer id="toolbar">
+      <button id="btn-stats" title="Stats" aria-label="View statistics">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+      </button>
+      <button id="btn-help" title="How to play" aria-label="How to play">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 9a3 3 0 1 1 3.5 2.97A2 2 0 0 0 11 14"/><circle cx="12" cy="18" r="0.5" fill="currentColor"/></svg>
+      </button>
+      <button id="btn-theme" title="Toggle theme" aria-label="Toggle theme">
+        <svg id="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hidden"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <button id="btn-sound" title="Toggle sound" aria-label="Toggle sound">
+        <svg id="icon-sound-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        <svg id="icon-sound-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hidden"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      </button>
+      <button id="btn-newgame" title="New Game" aria-label="New game">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+    </footer>
+
+    <!-- Game Over Overlay -->
+    <div id="game-over-overlay" class="modal-overlay hidden">
+      <div class="modal game-over-modal">
         <h2>Game Over</h2>
-        <p>Score: <span id="final-score">0</span></p>
-        <p>Best: <span id="final-best">0</span></p>
-        <button id="play-again-btn">Play Again</button>
+        <div id="go-score-display">
+          <div class="go-score-item">
+            <span class="go-score-num" id="final-score">0</span>
+            <span class="go-score-label">Score</span>
+          </div>
+          <div class="go-divider"></div>
+          <div class="go-score-item">
+            <span class="go-score-num" id="final-best">0</span>
+            <span class="go-score-label">Best</span>
+          </div>
+        </div>
+        <div id="go-stats">
+          <div class="go-stat"><span class="go-stat-val" id="go-lines">0</span><span class="go-stat-lbl">Lines</span></div>
+          <div class="go-stat"><span class="go-stat-val" id="go-combos">0</span><span class="go-stat-lbl">Combos</span></div>
+          <div class="go-stat"><span class="go-stat-val" id="go-pieces">0</span><span class="go-stat-lbl">Pieces</span></div>
+        </div>
+        <div id="new-best-banner" class="hidden">🏆 New Best!</div>
+        <button class="btn-primary" id="play-again-btn">Play Again</button>
       </div>
     </div>
 
-    <footer>
-      <button id="theme-toggle" title="Toggle theme">🌙</button>
-      <button id="sound-toggle" title="Toggle sound">🔊</button>
-    </footer>
+    <!-- Stats Modal -->
+    <div id="stats-overlay" class="modal-overlay hidden">
+      <div class="modal stats-modal">
+        <div class="modal-header">
+          <h2>Statistics</h2>
+          <button class="modal-close" id="stats-close">&times;</button>
+        </div>
+        <div id="stats-grid">
+          <div class="stat-card"><span class="stat-num" id="stat-games">0</span><span class="stat-lbl">Games</span></div>
+          <div class="stat-card"><span class="stat-num" id="stat-best">0</span><span class="stat-lbl">Best Score</span></div>
+          <div class="stat-card"><span class="stat-num" id="stat-avg">0</span><span class="stat-lbl">Avg Score</span></div>
+          <div class="stat-card"><span class="stat-num" id="stat-pieces">0</span><span class="stat-lbl">Pieces Placed</span></div>
+          <div class="stat-card"><span class="stat-num" id="stat-lines">0</span><span class="stat-lbl">Lines Cleared</span></div>
+          <div class="stat-card"><span class="stat-num" id="stat-streak">0</span><span class="stat-lbl">Day Streak</span></div>
+        </div>
+        <button class="btn-secondary" id="stats-reset">Reset Stats</button>
+      </div>
+    </div>
+
+    <!-- How to Play Modal -->
+    <div id="help-overlay" class="modal-overlay hidden">
+      <div class="modal help-modal">
+        <div class="modal-header">
+          <h2>How to Play</h2>
+          <button class="modal-close" id="help-close">&times;</button>
+        </div>
+        <div class="help-steps">
+          <div class="help-step">
+            <div class="help-icon">👆</div>
+            <div class="help-text">
+              <strong>Drag & Drop</strong>
+              <p>Drag pieces from the tray onto the 9x9 board.</p>
+            </div>
+          </div>
+          <div class="help-step">
+            <div class="help-icon">✨</div>
+            <div class="help-text">
+              <strong>Clear Lines</strong>
+              <p>Fill a complete row, column, or 3x3 box to clear it and earn points.</p>
+            </div>
+          </div>
+          <div class="help-step">
+            <div class="help-icon">🔥</div>
+            <div class="help-text">
+              <strong>Combos</strong>
+              <p>Clear multiple lines at once for bonus points. Chain clears for combo multipliers!</p>
+            </div>
+          </div>
+          <div class="help-step">
+            <div class="help-icon">🧠</div>
+            <div class="help-text">
+              <strong>Think Ahead</strong>
+              <p>All 3 pieces must be placed before new ones appear. Plan your moves carefully!</p>
+            </div>
+          </div>
+        </div>
+        <button class="btn-primary" id="help-got-it">Got it!</button>
+      </div>
+    </div>
+
+    <!-- New Game Confirm Modal -->
+    <div id="newgame-overlay" class="modal-overlay hidden">
+      <div class="modal confirm-modal">
+        <h2>New Game?</h2>
+        <p>Your current progress will be lost.</p>
+        <div class="confirm-buttons">
+          <button class="btn-secondary" id="newgame-cancel">Cancel</button>
+          <button class="btn-primary" id="newgame-confirm">New Game</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="game.js"></script>

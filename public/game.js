@@ -1,5 +1,5 @@
 // ============================================================
-// BlockDoku - Browser Edition
+// BlockDoku - Browser Edition (Complete Overhaul)
 // ============================================================
 
 (() => {
@@ -9,11 +9,16 @@
   const GRID = 9;
   const BOX = 3;
   const CELL_COLORS = [
-    "#f72585", "#7209b7", "#3a0ca3", "#4361ee",
-    "#4cc9f0", "#06d6a0", "#ffd166", "#ef476f",
+    "#ff3b7a", "#a855f7", "#6366f1", "#3b82f6",
+    "#22d3ee", "#10b981", "#f59e0b", "#ef4444",
+  ];
+  // Lighter variants for shine effects
+  const CELL_COLORS_LIGHT = [
+    "#ff6b9d", "#c084fc", "#818cf8", "#60a5fa",
+    "#67e8f9", "#34d399", "#fbbf24", "#f87171",
   ];
 
-  // --- Piece Definitions (relative cells) ---
+  // --- Piece Definitions (relative cells [row, col]) ---
   const PIECE_DEFS = [
     // Single
     [[0,0]],
@@ -59,34 +64,62 @@
     [[-1,1],[0,0],[0,1],[0,2]],
   ];
 
-  // --- State ---
-  let board = [];       // 9x9 grid: 0 = empty, colorIndex otherwise
+  // --- Game State ---
+  let board = [];
   let score = 0;
   let bestScore = 0;
-  let pieces = [null, null, null];   // current 3 piece slots
+  let pieces = [null, null, null];
   let soundOn = true;
   let darkMode = true;
+  let comboCount = 0;
+  let gameActive = true;
 
-  // --- DOM ---
+  // Per-game stats
+  let gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
+
+  // --- DOM Elements ---
   const canvas = document.getElementById("board");
   const ctx = canvas.getContext("2d");
+  const fxCanvas = document.getElementById("fx-layer");
+  const fxCtx = fxCanvas.getContext("2d");
   const tray = document.getElementById("pieces-tray");
   const scoreEl = document.getElementById("score");
   const bestEl = document.getElementById("best-score");
-  const overlay = document.getElementById("game-over-overlay");
+  const comboBadge = document.getElementById("combo-badge");
+  const comboText = document.getElementById("combo-text");
+
+  // Game Over
+  const goOverlay = document.getElementById("game-over-overlay");
   const finalScoreEl = document.getElementById("final-score");
   const finalBestEl = document.getElementById("final-best");
+  const goLines = document.getElementById("go-lines");
+  const goCombos = document.getElementById("go-combos");
+  const goPieces = document.getElementById("go-pieces");
+  const newBestBanner = document.getElementById("new-best-banner");
   const playAgainBtn = document.getElementById("play-again-btn");
-  const themeBtn = document.getElementById("theme-toggle");
-  const soundBtn = document.getElementById("sound-toggle");
 
-  // --- Audio (simple oscillator beeps) ---
+  // Modals
+  const statsOverlay = document.getElementById("stats-overlay");
+  const helpOverlay = document.getElementById("help-overlay");
+  const newgameOverlay = document.getElementById("newgame-overlay");
+
+  // Toolbar
+  const btnStats = document.getElementById("btn-stats");
+  const btnHelp = document.getElementById("btn-help");
+  const btnTheme = document.getElementById("btn-theme");
+  const btnSound = document.getElementById("btn-sound");
+  const btnNewgame = document.getElementById("btn-newgame");
+
+  // ============================================================
+  // AUDIO SYSTEM
+  // ============================================================
   let audioCtx = null;
   function getAudioCtx() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     return audioCtx;
   }
-  function playTone(freq, duration, type = "square") {
+
+  function playTone(freq, duration, type = "sine", vol = 0.06) {
     if (!soundOn) return;
     try {
       const ac = getAudioCtx();
@@ -94,35 +127,142 @@
       const gain = ac.createGain();
       osc.type = type;
       osc.frequency.value = freq;
-      gain.gain.value = 0.08;
+      gain.gain.setValueAtTime(vol, ac.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
       osc.connect(gain).connect(ac.destination);
       osc.start();
       osc.stop(ac.currentTime + duration);
     } catch {}
   }
-  function sfxPlace() { playTone(520, 0.08, "sine"); }
-  function sfxClear() { playTone(780, 0.15, "sine"); setTimeout(() => playTone(1040, 0.15, "sine"), 80); }
-  function sfxGameOver() { playTone(220, 0.3, "sawtooth"); setTimeout(() => playTone(160, 0.4, "sawtooth"), 200); }
 
-  // --- Sizing ---
-  let cellSize, boardPx, boardX, boardY;
+  function sfxPlace() {
+    playTone(600, 0.07, "sine", 0.05);
+    playTone(900, 0.05, "sine", 0.03);
+  }
+
+  function sfxClear(count) {
+    const baseFreq = 500 + count * 100;
+    playTone(baseFreq, 0.12, "sine", 0.06);
+    setTimeout(() => playTone(baseFreq + 200, 0.12, "sine", 0.06), 60);
+    if (count > 1) {
+      setTimeout(() => playTone(baseFreq + 400, 0.15, "sine", 0.06), 120);
+    }
+  }
+
+  function sfxCombo(count) {
+    const baseFreq = 600 + count * 150;
+    for (let i = 0; i < Math.min(count, 4); i++) {
+      setTimeout(() => playTone(baseFreq + i * 100, 0.1, "sine", 0.05), i * 60);
+    }
+  }
+
+  function sfxGameOver() {
+    playTone(300, 0.3, "sawtooth", 0.04);
+    setTimeout(() => playTone(200, 0.4, "sawtooth", 0.04), 150);
+    setTimeout(() => playTone(150, 0.5, "sawtooth", 0.03), 300);
+  }
+
+  // ============================================================
+  // PARTICLE SYSTEM
+  // ============================================================
+  let particles = [];
+
+  function spawnParticles(x, y, color, count = 8) {
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+      const speed = 1.5 + Math.random() * 3;
+      particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        decay: 0.015 + Math.random() * 0.02,
+        size: 2 + Math.random() * 3,
+        color,
+      });
+    }
+  }
+
+  function spawnClearParticles(cellIndices) {
+    for (const idx of cellIndices) {
+      const r = Math.floor(idx / GRID);
+      const c = idx % GRID;
+      const x = c * cellSize + cellSize / 2;
+      const y = r * cellSize + cellSize / 2;
+      const colorIdx = board[r][c];
+      const color = colorIdx > 0 ? CELL_COLORS[(colorIdx - 1) % CELL_COLORS.length] : "#6c8cff";
+      spawnParticles(x, y, color, 5);
+    }
+  }
+
+  function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.05; // gravity
+      p.life -= p.decay;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function drawParticles() {
+    fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+    for (const p of particles) {
+      fxCtx.globalAlpha = p.life;
+      fxCtx.fillStyle = p.color;
+      fxCtx.beginPath();
+      fxCtx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      fxCtx.fill();
+    }
+    fxCtx.globalAlpha = 1;
+  }
+
+  // Animation loop for particles
+  let animFrameId = null;
+  function animLoop() {
+    if (particles.length > 0) {
+      updateParticles();
+      drawParticles();
+    }
+    animFrameId = requestAnimationFrame(animLoop);
+  }
+
+  // ============================================================
+  // SIZING
+  // ============================================================
+  let cellSize, boardPx;
 
   function resize() {
-    const maxW = Math.min(window.innerWidth - 24, 500);
-    const maxH = window.innerHeight * 0.52;
-    boardPx = Math.min(maxW, maxH);
-    boardPx = Math.floor(boardPx / GRID) * GRID; // snap to grid
+    const headerH = document.getElementById("header").offsetHeight;
+    const toolbarH = document.getElementById("toolbar").offsetHeight;
+    const appPad = 16 + 8; // padding + gaps
+    const trayMinH = 80;
+    const availH = window.innerHeight - headerH - toolbarH - appPad - trayMinH - 20;
+    const availW = Math.min(window.innerWidth - 44, 480 - 32); // account for wrapper padding
+
+    boardPx = Math.min(availW, availH);
+    boardPx = Math.max(boardPx, 200); // minimum
+    boardPx = Math.floor(boardPx / GRID) * GRID;
     cellSize = boardPx / GRID;
+
     canvas.width = boardPx;
     canvas.height = boardPx;
     canvas.style.width = boardPx + "px";
     canvas.style.height = boardPx + "px";
+
+    fxCanvas.width = boardPx;
+    fxCanvas.height = boardPx;
+    fxCanvas.style.width = boardPx + "px";
+    fxCanvas.style.height = boardPx + "px";
+
     drawBoard();
     renderPieces();
   }
 
-  // --- Board Logic ---
+  // ============================================================
+  // BOARD LOGIC
+  // ============================================================
   function initBoard() {
     board = [];
     for (let r = 0; r < GRID; r++) {
@@ -150,17 +290,14 @@
     const colsToClear = [];
     const boxesToClear = [];
 
-    // Rows
     for (let r = 0; r < GRID; r++) {
       if (board[r].every(c => c !== 0)) rowsToClear.push(r);
     }
-    // Cols
     for (let c = 0; c < GRID; c++) {
       let full = true;
       for (let r = 0; r < GRID; r++) { if (board[r][c] === 0) { full = false; break; } }
       if (full) colsToClear.push(c);
     }
-    // 3x3 Boxes
     for (let br = 0; br < 3; br++) {
       for (let bc = 0; bc < 3; bc++) {
         let full = true;
@@ -175,7 +312,11 @@
     }
 
     const totalClears = rowsToClear.length + colsToClear.length + boxesToClear.length;
-    if (totalClears === 0) return 0;
+    if (totalClears === 0) {
+      comboCount = 0;
+      hideComboBadge();
+      return 0;
+    }
 
     // Collect cells to clear
     const clearSet = new Set();
@@ -191,34 +332,58 @@
       }
     }
 
-    // Flash animation
-    animateClear([...clearSet]);
+    // Spawn particles BEFORE clearing
+    spawnClearParticles([...clearSet]);
 
-    // Clear cells
+    // Clear cells with staggered animation
+    animateClearStaggered([...clearSet]);
+
+    // Actually clear cells
     for (const idx of clearSet) {
       const r = Math.floor(idx / GRID);
       const c = idx % GRID;
       board[r][c] = 0;
     }
 
-    // Scoring: 9 per line/box, bonus for combos
+    // Update combo
+    comboCount++;
+    gameStats.linesCleared += totalClears;
+    if (comboCount > 1) {
+      gameStats.combos++;
+    }
+
+    // Scoring: base + combo multiplier
     let pts = clearSet.size;
     if (totalClears > 1) {
-      pts += totalClears * 10; // combo bonus
+      pts += totalClears * 10;
+    }
+    if (comboCount > 1) {
+      pts = Math.floor(pts * (1 + comboCount * 0.5));
+      showComboBadge(comboCount);
+      sfxCombo(comboCount);
+    }
+
+    // Haptic feedback
+    if (navigator.vibrate) {
+      navigator.vibrate(totalClears > 1 ? [30, 20, 30] : [20]);
     }
 
     return pts;
   }
 
-  function animateClear(cells) {
-    // Quick white flash on cleared cells
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--clear-flash").trim() || "rgba(255,255,255,0.8)";
-    for (const idx of cells) {
-      const r = Math.floor(idx / GRID);
-      const c = idx % GRID;
-      const x = c * cellSize;
-      const y = r * cellSize;
-      ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+  function animateClearStaggered(cells) {
+    // Flash and board glow
+    const wrapper = document.getElementById("board-wrapper");
+    wrapper.classList.remove("board-glow");
+    void wrapper.offsetWidth;
+    wrapper.classList.add("board-glow");
+
+    if (cells.length > 12) {
+      // Big clear: screen shake
+      const app = document.getElementById("app");
+      app.classList.remove("shake");
+      void app.offsetWidth;
+      app.classList.add("shake");
     }
   }
 
@@ -234,7 +399,9 @@
     return false;
   }
 
-  // --- Drawing ---
+  // ============================================================
+  // DRAWING
+  // ============================================================
   function drawBoard() {
     const style = getComputedStyle(document.documentElement);
     const gridBg = style.getPropertyValue("--grid-bg").trim();
@@ -244,32 +411,47 @@
     // Background
     ctx.fillStyle = gridBg;
     ctx.beginPath();
-    roundRect(ctx, 0, 0, boardPx, boardPx, 12);
+    roundRect(ctx, 0, 0, boardPx, boardPx, 8);
     ctx.fill();
 
-    // Cells
+    const pad = 1.5;
+    const radius = 4;
+
+    // Draw cells
     for (let r = 0; r < GRID; r++) {
       for (let c = 0; c < GRID; c++) {
         const x = c * cellSize;
         const y = r * cellSize;
-        const pad = 1.5;
 
         if (board[r][c] !== 0) {
-          const color = CELL_COLORS[(board[r][c] - 1) % CELL_COLORS.length];
+          const ci = (board[r][c] - 1) % CELL_COLORS.length;
+          const color = CELL_COLORS[ci];
+          const lightColor = CELL_COLORS_LIGHT[ci];
+
+          // Main fill
           ctx.fillStyle = color;
           ctx.beginPath();
-          roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2, 4);
+          roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2, radius);
           ctx.fill();
 
-          // Shine
-          ctx.fillStyle = "rgba(255,255,255,0.15)";
+          // Top shine (gradient)
+          const shineGrad = ctx.createLinearGradient(x, y + pad, x, y + cellSize * 0.5);
+          shineGrad.addColorStop(0, "rgba(255,255,255,0.2)");
+          shineGrad.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = shineGrad;
           ctx.beginPath();
-          roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, (cellSize - pad * 2) * 0.4, 4);
+          roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, cellSize * 0.5 - pad, radius);
+          ctx.fill();
+
+          // Bottom shadow
+          ctx.fillStyle = "rgba(0,0,0,0.12)";
+          ctx.beginPath();
+          roundRect(ctx, x + pad, y + cellSize * 0.7, cellSize - pad * 2, cellSize * 0.3 - pad, radius);
           ctx.fill();
         } else {
           ctx.fillStyle = cellEmpty;
           ctx.beginPath();
-          roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2, 4);
+          roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2, radius);
           ctx.fill();
         }
       }
@@ -280,39 +462,50 @@
     ctx.lineWidth = 2;
     for (let br = 0; br < 3; br++) {
       for (let bc = 0; bc < 3; bc++) {
-        ctx.strokeRect(bc * cellSize * 3 + 0.5, br * cellSize * 3 + 0.5, cellSize * 3, cellSize * 3);
+        ctx.beginPath();
+        roundRect(ctx, bc * cellSize * 3 + 0.5, br * cellSize * 3 + 0.5, cellSize * 3, cellSize * 3, 6);
+        ctx.stroke();
       }
     }
   }
 
   function drawGhost(piece, row, col, valid) {
-    drawBoard(); // redraw base
-    const style = getComputedStyle(document.documentElement);
-    const hoverColor = valid
-      ? (style.getPropertyValue("--cell-hover-valid").trim())
-      : (style.getPropertyValue("--cell-hover-invalid").trim());
-
+    drawBoard();
     if (valid) {
-      const color = CELL_COLORS[(piece.colorIdx - 1) % CELL_COLORS.length];
+      const ci = (piece.colorIdx - 1) % CELL_COLORS.length;
+      const color = CELL_COLORS[ci];
       for (const [dr, dc] of piece.cells) {
         const r = row + dr, c = col + dc;
         if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
         const x = c * cellSize, y = r * cellSize;
+
+        // Ghost fill with pulse
         ctx.fillStyle = color;
-        ctx.globalAlpha = 0.5;
+        ctx.globalAlpha = 0.45;
         ctx.beginPath();
-        roundRect(ctx, x + 1.5, y + 1.5, cellSize - 3, cellSize - 3, 4);
+        roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
         ctx.fill();
+
+        // Ghost border
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
+        ctx.stroke();
+
         ctx.globalAlpha = 1;
       }
     } else {
+      const style = getComputedStyle(document.documentElement);
+      const hoverColor = style.getPropertyValue("--cell-hover-invalid").trim();
       for (const [dr, dc] of piece.cells) {
         const r = row + dr, c = col + dc;
         if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
         const x = c * cellSize, y = r * cellSize;
         ctx.fillStyle = hoverColor;
         ctx.beginPath();
-        roundRect(ctx, x + 1.5, y + 1.5, cellSize - 3, cellSize - 3, 4);
+        roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
         ctx.fill();
       }
     }
@@ -331,7 +524,9 @@
     ctx.closePath();
   }
 
-  // --- Piece Generation ---
+  // ============================================================
+  // PIECE GENERATION & RENDERING
+  // ============================================================
   function randomPiece() {
     const def = PIECE_DEFS[Math.floor(Math.random() * PIECE_DEFS.length)];
     const colorIdx = Math.floor(Math.random() * CELL_COLORS.length) + 1;
@@ -343,19 +538,17 @@
     renderPieces();
   }
 
-  // --- Piece Rendering in Tray ---
   function renderPieces() {
-    tray.innerHTML = "";
-    pieces.forEach((piece, idx) => {
-      const slot = document.createElement("div");
-      slot.className = "piece-slot" + (piece ? "" : " used");
-      slot.dataset.idx = idx;
+    const slots = tray.querySelectorAll(".piece-slot");
+    slots.forEach((slot, idx) => {
+      slot.innerHTML = "";
+      const piece = pieces[idx];
 
       if (piece) {
+        slot.classList.remove("used");
         const pCanvas = document.createElement("canvas");
         const pCtx = pCanvas.getContext("2d");
 
-        // Calculate bounds
         let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
         for (const [dr, dc] of piece.cells) {
           minR = Math.min(minR, dr); maxR = Math.max(maxR, dr);
@@ -363,62 +556,84 @@
         }
         const rows = maxR - minR + 1;
         const cols = maxC - minC + 1;
-        const pCellSize = Math.min(28, (window.innerWidth - 80) / 15);
-        pCanvas.width = cols * pCellSize;
-        pCanvas.height = rows * pCellSize;
 
-        const color = CELL_COLORS[(piece.colorIdx - 1) % CELL_COLORS.length];
+        // Dynamic cell size based on available space
+        const slotW = slot.clientWidth - 16;
+        const slotH = slot.clientHeight - 16;
+        const pCellSize = Math.min(
+          Math.floor(slotW / cols),
+          Math.floor(slotH / rows),
+          Math.floor(cellSize * 0.65)
+        );
+        const finalCellSize = Math.max(pCellSize, 12);
+
+        pCanvas.width = cols * finalCellSize;
+        pCanvas.height = rows * finalCellSize;
+
+        const ci = (piece.colorIdx - 1) % CELL_COLORS.length;
+        const color = CELL_COLORS[ci];
+
         for (const [dr, dc] of piece.cells) {
-          const x = (dc - minC) * pCellSize;
-          const y = (dr - minR) * pCellSize;
+          const x = (dc - minC) * finalCellSize;
+          const y = (dr - minR) * finalCellSize;
+          const p = 1;
+
+          // Main fill
           pCtx.fillStyle = color;
           pCtx.beginPath();
-          roundRect(pCtx, x + 1, y + 1, pCellSize - 2, pCellSize - 2, 3);
+          roundRect(pCtx, x + p, y + p, finalCellSize - p * 2, finalCellSize - p * 2, 3);
           pCtx.fill();
-          pCtx.fillStyle = "rgba(255,255,255,0.18)";
+
+          // Shine
+          const shineGrad = pCtx.createLinearGradient(x, y + p, x, y + finalCellSize * 0.5);
+          shineGrad.addColorStop(0, "rgba(255,255,255,0.25)");
+          shineGrad.addColorStop(1, "rgba(255,255,255,0)");
+          pCtx.fillStyle = shineGrad;
           pCtx.beginPath();
-          roundRect(pCtx, x + 1, y + 1, pCellSize - 2, (pCellSize - 2) * 0.4, 3);
+          roundRect(pCtx, x + p, y + p, finalCellSize - p * 2, finalCellSize * 0.45, 3);
           pCtx.fill();
         }
 
         slot.appendChild(pCanvas);
+      } else {
+        slot.classList.add("used");
       }
-
-      tray.appendChild(slot);
     });
   }
 
-  // --- Drag & Drop ---
+  // ============================================================
+  // DRAG & DROP
+  // ============================================================
   let dragPiece = null;
   let dragIdx = -1;
   let dragOffsetR = 0;
   let dragOffsetC = 0;
   let ghostEl = null;
+  let lastGhostRow = -999;
+  let lastGhostCol = -999;
 
   function startDrag(idx, clientX, clientY) {
-    if (!pieces[idx]) return;
+    if (!pieces[idx] || !gameActive) return;
     dragPiece = pieces[idx];
     dragIdx = idx;
 
-    // Calculate piece center offset
     let sumR = 0, sumC = 0;
     for (const [dr, dc] of dragPiece.cells) { sumR += dr; sumC += dc; }
     dragOffsetR = sumR / dragPiece.cells.length;
     dragOffsetC = sumC / dragPiece.cells.length;
 
-    // Create floating ghost
-    const slot = tray.children[idx];
+    const slot = tray.querySelectorAll(".piece-slot")[idx];
     slot.classList.add("dragging");
 
+    // Create floating ghost from the piece canvas
     ghostEl = document.createElement("div");
-    ghostEl.style.position = "fixed";
-    ghostEl.style.pointerEvents = "none";
-    ghostEl.style.zIndex = "200";
-    ghostEl.style.opacity = "0.85";
+    ghostEl.className = "drag-ghost";
 
     const pc = slot.querySelector("canvas");
     if (pc) {
-      const clone = pc.cloneNode(true);
+      const clone = document.createElement("canvas");
+      clone.width = pc.width;
+      clone.height = pc.height;
       clone.getContext("2d").drawImage(pc, 0, 0);
       ghostEl.appendChild(clone);
       ghostEl.style.width = pc.width + "px";
@@ -431,21 +646,25 @@
   function moveGhost(clientX, clientY) {
     if (!ghostEl) return;
     ghostEl.style.left = (clientX - ghostEl.offsetWidth / 2) + "px";
-    ghostEl.style.top = (clientY - ghostEl.offsetHeight - 40) + "px";
+    ghostEl.style.top = (clientY - ghostEl.offsetHeight - 50) + "px";
 
-    // Calculate board position
     const rect = canvas.getBoundingClientRect();
     const bx = clientX - rect.left;
-    const by = clientY - rect.top - cellSize * 2; // offset up so you can see
+    const by = clientY - rect.top - cellSize * 2;
 
     const col = Math.round(bx / cellSize - dragOffsetC);
     const row = Math.round(by / cellSize - dragOffsetR);
 
-    if (row >= -1 && row < GRID + 1 && col >= -1 && col < GRID + 1) {
-      const valid = canPlace(dragPiece, row, col);
-      drawGhost(dragPiece, row, col, valid);
-    } else {
-      drawBoard();
+    // Only redraw if ghost position changed
+    if (row !== lastGhostRow || col !== lastGhostCol) {
+      lastGhostRow = row;
+      lastGhostCol = col;
+      if (row >= -2 && row < GRID + 2 && col >= -2 && col < GRID + 2) {
+        const valid = canPlace(dragPiece, row, col);
+        drawGhost(dragPiece, row, col, valid);
+      } else {
+        drawBoard();
+      }
     }
   }
 
@@ -462,6 +681,7 @@
     if (canPlace(dragPiece, row, col)) {
       placePiece(dragPiece, row, col);
       sfxPlace();
+      gameStats.piecesPlaced++;
 
       // Score for placing
       const placePts = dragPiece.cells.length;
@@ -470,9 +690,9 @@
       // Check clears
       const clearPts = checkClears();
       if (clearPts > 0) {
-        sfxClear();
+        sfxClear(Math.ceil(clearPts / 9));
         addScore(clearPts);
-        showFloatScore(clearPts, clientX, clientY - 60);
+        showFloatScore(clearPts, clientX, clientY - 80, clearPts > 20);
       }
 
       pieces[dragIdx] = null;
@@ -485,16 +705,21 @@
 
       // Check game over
       if (!anyMovePossible()) {
-        setTimeout(gameOver, 400);
+        gameActive = false;
+        setTimeout(gameOver, 500);
       }
+
+      saveState();
     }
 
     // Cleanup
     if (ghostEl) { ghostEl.remove(); ghostEl = null; }
-    const slot = tray.children[dragIdx];
+    const slot = tray.querySelectorAll(".piece-slot")[dragIdx];
     if (slot) slot.classList.remove("dragging");
     dragPiece = null;
     dragIdx = -1;
+    lastGhostRow = -999;
+    lastGhostCol = -999;
     drawBoard();
   }
 
@@ -519,6 +744,7 @@
     const t = e.touches[0];
     startDrag(parseInt(slot.dataset.idx), t.clientX, t.clientY);
   }, { passive: false });
+
   window.addEventListener("touchmove", (e) => {
     if (dragPiece) {
       e.preventDefault();
@@ -526,6 +752,7 @@
       moveGhost(t.clientX, t.clientY);
     }
   }, { passive: false });
+
   window.addEventListener("touchend", (e) => {
     if (dragPiece) {
       const t = e.changedTouches[0];
@@ -533,12 +760,14 @@
     }
   });
 
-  // --- Scoring ---
+  // ============================================================
+  // SCORING & UI
+  // ============================================================
   function addScore(pts) {
     score += pts;
     scoreEl.textContent = score;
     scoreEl.classList.remove("score-pop");
-    void scoreEl.offsetWidth; // reflow
+    void scoreEl.offsetWidth;
     scoreEl.classList.add("score-pop");
 
     if (score > bestScore) {
@@ -548,38 +777,123 @@
     }
   }
 
-  function showFloatScore(pts, x, y) {
+  function showFloatScore(pts, x, y, big) {
     const el = document.createElement("div");
-    el.className = "float-score";
+    el.className = "float-score" + (big ? " big" : "");
     el.textContent = "+" + pts;
     el.style.left = x + "px";
     el.style.top = y + "px";
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 800);
+    setTimeout(() => el.remove(), 900);
   }
 
-  // --- Game Over ---
+  function showComboBadge(count) {
+    comboText.textContent = "x" + count;
+    comboBadge.classList.remove("hidden");
+    comboBadge.style.animation = "none";
+    void comboBadge.offsetWidth;
+    comboBadge.style.animation = "";
+  }
+
+  function hideComboBadge() {
+    comboBadge.classList.add("hidden");
+  }
+
+  // ============================================================
+  // GAME FLOW
+  // ============================================================
   function gameOver() {
     sfxGameOver();
+    const isNewBest = score >= bestScore && score > 0;
+
     finalScoreEl.textContent = score;
     finalBestEl.textContent = bestScore;
-    overlay.classList.remove("hidden");
+    goLines.textContent = gameStats.linesCleared;
+    goCombos.textContent = gameStats.combos;
+    goPieces.textContent = gameStats.piecesPlaced;
+
+    if (isNewBest) {
+      newBestBanner.classList.remove("hidden");
+    } else {
+      newBestBanner.classList.add("hidden");
+    }
+
+    goOverlay.classList.remove("hidden");
+
+    // Save to lifetime stats
+    updateLifetimeStats();
   }
 
-  // --- New Game ---
   function newGame() {
-    overlay.classList.add("hidden");
+    goOverlay.classList.add("hidden");
     score = 0;
+    comboCount = 0;
+    gameActive = true;
+    gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
     scoreEl.textContent = "0";
+    hideComboBadge();
     initBoard();
     dealPieces();
     drawBoard();
     saveState();
   }
 
-  // --- Save / Load ---
+  // ============================================================
+  // STATS
+  // ============================================================
+  function getLifetimeStats() {
+    try {
+      return JSON.parse(localStorage.getItem("blockdoku_lifetime") || "null") || {
+        games: 0, bestScore: 0, totalScore: 0, totalPieces: 0, totalLines: 0, streak: 0, lastPlayDate: null,
+      };
+    } catch {
+      return { games: 0, bestScore: 0, totalScore: 0, totalPieces: 0, totalLines: 0, streak: 0, lastPlayDate: null };
+    }
+  }
+
+  function updateLifetimeStats() {
+    const stats = getLifetimeStats();
+    stats.games++;
+    stats.totalScore += score;
+    stats.totalPieces += gameStats.piecesPlaced;
+    stats.totalLines += gameStats.linesCleared;
+    if (score > stats.bestScore) stats.bestScore = score;
+
+    // Streak tracking
+    const today = new Date().toISOString().slice(0, 10);
+    if (stats.lastPlayDate) {
+      const last = new Date(stats.lastPlayDate);
+      const now = new Date(today);
+      const diff = Math.floor((now - last) / (1000 * 60 * 60 * 24));
+      if (diff === 1) {
+        stats.streak++;
+      } else if (diff > 1) {
+        stats.streak = 1;
+      }
+    } else {
+      stats.streak = 1;
+    }
+    stats.lastPlayDate = today;
+
+    localStorage.setItem("blockdoku_lifetime", JSON.stringify(stats));
+  }
+
+  function showStats() {
+    const stats = getLifetimeStats();
+    document.getElementById("stat-games").textContent = stats.games;
+    document.getElementById("stat-best").textContent = stats.bestScore;
+    document.getElementById("stat-avg").textContent = stats.games > 0 ? Math.round(stats.totalScore / stats.games) : 0;
+    document.getElementById("stat-pieces").textContent = stats.totalPieces;
+    document.getElementById("stat-lines").textContent = stats.totalLines;
+    document.getElementById("stat-streak").textContent = stats.streak;
+    statsOverlay.classList.remove("hidden");
+  }
+
+  // ============================================================
+  // SAVE / LOAD
+  // ============================================================
   function saveState() {
-    const state = { board, score, pieces };
+    const state = { board, score, pieces, gameStats, comboCount };
     localStorage.setItem("blockdoku_state", JSON.stringify(state));
   }
 
@@ -594,10 +908,13 @@
         board = s.board;
         score = s.score;
         pieces = s.pieces;
+        gameStats = s.gameStats || { linesCleared: 0, combos: 0, piecesPlaced: 0 };
+        comboCount = s.comboCount || 0;
         scoreEl.textContent = score;
         drawBoard();
         renderPieces();
         if (!anyMovePossible()) {
+          gameActive = false;
           setTimeout(gameOver, 300);
         }
         return true;
@@ -606,34 +923,74 @@
     return false;
   }
 
-  // Auto-save periodically
+  // Auto-save
   setInterval(() => {
-    if (score > 0) saveState();
+    if (score > 0 && gameActive) saveState();
   }, 5000);
 
-  // --- Theme ---
+  // ============================================================
+  // THEME & SOUND
+  // ============================================================
   function setTheme(dark) {
     darkMode = dark;
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-    themeBtn.textContent = dark ? "🌙" : "☀️";
+    document.querySelector('meta[name="theme-color"]').setAttribute("content", dark ? "#0a0a1a" : "#f0f2f8");
     localStorage.setItem("blockdoku_theme", dark ? "dark" : "light");
     drawBoard();
   }
 
-  themeBtn.addEventListener("click", () => setTheme(!darkMode));
-
-  // --- Sound ---
-  soundBtn.addEventListener("click", () => {
+  function toggleSound() {
     soundOn = !soundOn;
-    soundBtn.textContent = soundOn ? "🔊" : "🔇";
+    document.getElementById("icon-sound-on").classList.toggle("hidden", !soundOn);
+    document.getElementById("icon-sound-off").classList.toggle("hidden", soundOn);
     localStorage.setItem("blockdoku_sound", soundOn ? "on" : "off");
-  });
+  }
 
-  // --- Init ---
+  // ============================================================
+  // EVENT LISTENERS
+  // ============================================================
   playAgainBtn.addEventListener("click", newGame);
   window.addEventListener("resize", resize);
 
-  // Init board early so setTheme -> drawBoard doesn't crash on empty array
+  // Toolbar
+  btnStats.addEventListener("click", showStats);
+  btnHelp.addEventListener("click", () => helpOverlay.classList.remove("hidden"));
+  btnTheme.addEventListener("click", () => setTheme(!darkMode));
+  btnSound.addEventListener("click", toggleSound);
+  btnNewgame.addEventListener("click", () => {
+    if (score > 0 && gameActive) {
+      newgameOverlay.classList.remove("hidden");
+    } else {
+      newGame();
+    }
+  });
+
+  // Modal closes
+  document.getElementById("stats-close").addEventListener("click", () => statsOverlay.classList.add("hidden"));
+  document.getElementById("help-close").addEventListener("click", () => helpOverlay.classList.add("hidden"));
+  document.getElementById("help-got-it").addEventListener("click", () => helpOverlay.classList.add("hidden"));
+  document.getElementById("newgame-cancel").addEventListener("click", () => newgameOverlay.classList.add("hidden"));
+  document.getElementById("newgame-confirm").addEventListener("click", () => {
+    newgameOverlay.classList.add("hidden");
+    newGame();
+  });
+  document.getElementById("stats-reset").addEventListener("click", () => {
+    if (confirm("Reset all stats? This cannot be undone.")) {
+      localStorage.removeItem("blockdoku_lifetime");
+      showStats();
+    }
+  });
+
+  // Close modals on overlay click
+  [statsOverlay, helpOverlay, newgameOverlay].forEach(overlay => {
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.classList.add("hidden");
+    });
+  });
+
+  // ============================================================
+  // INIT
+  // ============================================================
   initBoard();
 
   // Load preferences
@@ -643,12 +1000,22 @@
   const savedSound = localStorage.getItem("blockdoku_sound");
   if (savedSound) {
     soundOn = savedSound === "on";
-    soundBtn.textContent = soundOn ? "🔊" : "🔇";
+    document.getElementById("icon-sound-on").classList.toggle("hidden", !soundOn);
+    document.getElementById("icon-sound-off").classList.toggle("hidden", soundOn);
   }
 
-  // Start — loadState overwrites board if saved data exists
+  // Show help on first visit
+  if (!localStorage.getItem("blockdoku_played")) {
+    helpOverlay.classList.remove("hidden");
+    localStorage.setItem("blockdoku_played", "1");
+  }
+
+  // Start
   if (!loadState()) {
     dealPieces();
   }
   resize();
+
+  // Start particle animation loop
+  animLoop();
 })();
