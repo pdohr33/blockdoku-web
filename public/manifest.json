@@ -1,13 +1,13 @@
 {
-  "name": "BlockDoku",
+  "name": "BlockDoku: Block Puzzle Game",
   "short_name": "BlockDoku",
-  "description": "A satisfying block puzzle game. Place pieces, clear rows, columns, and boxes.",
+  "description": "Free brain training block puzzle with pixel art templates, daily challenges, and classic mode. Dark mode, combo scoring, and 4 difficulty levels.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a1a",
   "theme_color": "#0a0a1a",
   "orientation": "portrait",
-  "categories": ["games", "puzzle"],
+  "categories": ["games", "puzzle", "brain training"],
   "icons": [
     {
       "src": "icon-192.png",
