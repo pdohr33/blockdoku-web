@@ -139,6 +139,36 @@ h1 {
   background-clip: text;
 }
 
+.h1-subtitle {
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  opacity: 0.5;
+  display: block;
+  line-height: 1;
+  margin-top: -2px;
+}
+
+/* Above-the-fold tagline for SEO */
+#atf-tagline {
+  width: 100%;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding: 0 16px 4px;
+  line-height: 1.4;
+  max-width: 400px;
+}
+
+/* Google Play badge in store banner */
+#play-badge {
+  height: 28px;
+  width: auto;
+  vertical-align: middle;
+  filter: brightness(0.95);
+}
+
 #combo-badge {
   background: linear-gradient(135deg, #ff3b7a, #ff8547);
   padding: 2px 10px;
@@ -743,15 +773,9 @@ h1 {
 }
 
 #store-cta {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--success);
-  padding: 3px 10px;
-  border: 1px solid var(--success);
-  border-radius: 20px;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 /* --- Ad: Bottom Banner --- */

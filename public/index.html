@@ -3,21 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>BlockDoku - Free Block Puzzle Game Online | Play No Download</title>
-  <meta name="description" content="Play BlockDoku free online - a brain training block puzzle with pixel art templates, daily challenges, and classic mode. No download required. Dark mode, combos, and 4 difficulty levels.">
+  <title>BlockDoku - Free Online Block Puzzle Game | Play Now, No Download</title>
+  <meta name="description" content="Play BlockDoku free online - a sudoku block puzzle game with wood-style pieces, daily challenges, and pixel art modes. No download needed. Play this addictive block puzzle game now!">
   <meta name="theme-color" content="#0a0a1a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta property="og:title" content="BlockDoku - Free Block Puzzle Game Online">
-  <meta property="og:description" content="Brain training block puzzle meets pixel art. Play free online with daily challenges, combo scoring, and dark mode. No download needed.">
+  <meta property="og:title" content="BlockDoku - Free Online Block Puzzle Game">
+  <meta property="og:description" content="Addictive sudoku block puzzle game with pixel art modes, daily challenges, and combo scoring. Play free in your browser - no download needed.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://blockdoku-web.vercel.app/">
+  <meta property="og:image" content="https://blockdoku-web.vercel.app/og-image.svg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="BlockDoku - Free Online Block Puzzle Game with colorful blocks on a 9x9 grid">
   <meta property="og:site_name" content="BlockDoku">
   <meta property="og:locale" content="en_US">
-  <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="BlockDoku - Free Block Puzzle Game Online">
-  <meta name="twitter:description" content="Brain training block puzzle with pixel art templates. Play free in your browser. No download, daily challenges, combo scoring.">
-  <meta name="keywords" content="blockdoku, block puzzle, block puzzle online, play block puzzle free, sudoku block puzzle, brain training puzzle game, pixel art block puzzle, block puzzle no download, 9x9 block puzzle, free puzzle game, block puzzle dark mode, block puzzle daily challenge, relaxing block puzzle, block puzzle with levels, block puzzle for adults, block puzzle free offline, creative block puzzle">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="BlockDoku - Free Online Block Puzzle Game">
+  <meta name="twitter:description" content="Addictive sudoku block puzzle game. Play free in your browser with daily challenges, combo scoring, and pixel art modes. No download needed.">
+  <meta name="twitter:image" content="https://blockdoku-web.vercel.app/og-image.svg">
+  <meta name="twitter:image:alt" content="BlockDoku - Free Online Block Puzzle Game">
+  <meta name="keywords" content="block puzzle online, blockdoku, sudoku block puzzle, block puzzle game free, wood block puzzle, block puzzle, play block puzzle free, brain training puzzle game, pixel art block puzzle, block puzzle no download, 9x9 block puzzle, free puzzle game online, block puzzle dark mode, block puzzle daily challenge, relaxing block puzzle, block puzzle for adults, wooden block puzzle game, block puzzle app">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
   <link rel="canonical" href="https://blockdoku-web.vercel.app/">
   <script type="application/ld+json">
@@ -47,9 +53,12 @@
     },
     "author": {
       "@type": "Organization",
-      "name": "Dohr Business"
+      "name": "Dohr Business",
+      "url": "https://play.google.com/store/apps/developer?id=Dohr+Business"
     },
-    "aggregateRating": null
+    "inLanguage": "en",
+    "datePublished": "2025-01-01",
+    "image": "https://blockdoku-web.vercel.app/og-image.svg"
   }
   </script>
   <script type="application/ld+json">
@@ -116,9 +125,28 @@
     ]
   }
   </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "BlockDoku: Block Puzzle Game",
+    "operatingSystem": "Android",
+    "applicationCategory": "GameApplication",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "url": "https://play.google.com/store/apps/details?id=com.dohrbusiness.blockpuzzle",
+    "author": {
+      "@type": "Organization",
+      "name": "Dohr Business"
+    }
+  }
+  </script>
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -128,15 +156,17 @@
   <div id="app">
     <!-- Play Store Banner (always visible, no AdSense needed) -->
     <div id="store-banner">
-      <a href="https://play.google.com/store/apps/details?id=com.dohrbusiness.blockpuzzle" target="_blank" rel="noopener" id="store-link">
-        <span id="store-text">📱 Get the Android app with more modes!</span>
-        <span id="store-cta">Install</span>
+      <a href="https://play.google.com/store/apps/details?id=com.dohrbusiness.blockpuzzle&utm_source=web_game&utm_medium=banner&utm_campaign=cross_promo" target="_blank" rel="noopener" id="store-link">
+        <span id="store-text">Download on Google Play - offline mode + haptic feedback</span>
+        <span id="store-cta">
+          <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" id="play-badge" width="135" height="40" loading="eager">
+        </span>
       </a>
     </div>
     <!-- Header -->
     <header id="header">
       <div id="header-left">
-        <h1>BlockDoku</h1>
+        <h1>BlockDoku <span class="h1-subtitle">Block Puzzle Game</span></h1>
         <div id="combo-badge" class="hidden">
           <span id="combo-text">x2</span>
         </div>
@@ -152,6 +182,9 @@
         </div>
       </div>
     </header>
+
+    <!-- Above-the-fold SEO tagline (minimal, doesn't interfere with gameplay) -->
+    <p id="atf-tagline">Free online block puzzle game. Place blocks, clear lines, beat your high score.</p>
 
     <!-- Board -->
     <div id="board-wrapper">
@@ -310,8 +343,8 @@
 
       <!-- Hero / Landing -->
       <div class="seo-hero">
-        <h2 class="seo-h2">Play Block Puzzle Online - Free, No Download</h2>
-        <p class="seo-lead">BlockDoku is a free brain training block puzzle game that blends sudoku-style strategy with satisfying block-fitting gameplay. Place pieces on a 9x9 grid, clear rows, columns, and 3x3 boxes, and chase your high score. Play instantly in your browser - no download, no signup, no ads blocking your view.</p>
+        <h2 class="seo-h2">Play Block Puzzle Online Free - No Download Required</h2>
+        <p class="seo-lead">BlockDoku is a free online block puzzle game that combines sudoku-style strategy with the satisfying feel of a wood block puzzle. Drag and drop pieces onto a 9x9 grid, clear rows, columns, and 3x3 boxes, and chase your high score. Think of it as the best of sudoku block puzzle and classic wooden block puzzle games, playable instantly in your browser with no download, no signup, and no interruptions.</p>
       </div>
 
       <!-- Features -->
