@@ -116,6 +116,11 @@
 
   // --- Undo State ---
   let undoSnapshot = null; // { board, score, pieces, comboCount, gameStats }
+  let pendingGameOverId = null;
+  let gameOverRowTimeouts = [];
+  let gameOverShakeTimeoutId = null;
+  let gameOverAdPollId = null;
+  let gameOverAdSafetyId = null;
 
   // --- Level System ---
   // Exponential curve: level N requires N^2 * 50 cumulative XP
@@ -619,6 +624,46 @@
     setTimeout(() => el.remove(), 450);
   }
 
+  function clearTransientFx() {
+    particles = [];
+    pulses = [];
+    sweeps = [];
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+    animFrameId = null;
+    animRunning = false;
+    fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+  }
+
+  function clearGameOverState() {
+    if (pendingGameOverId) {
+      clearTimeout(pendingGameOverId);
+      pendingGameOverId = null;
+    }
+    for (const timeoutId of gameOverRowTimeouts) clearTimeout(timeoutId);
+    gameOverRowTimeouts = [];
+    if (gameOverShakeTimeoutId) {
+      clearTimeout(gameOverShakeTimeoutId);
+      gameOverShakeTimeoutId = null;
+    }
+    if (gameOverAdPollId) {
+      clearInterval(gameOverAdPollId);
+      gameOverAdPollId = null;
+    }
+    if (gameOverAdSafetyId) {
+      clearTimeout(gameOverAdSafetyId);
+      gameOverAdSafetyId = null;
+    }
+  }
+
+  function scheduleGameOver(delay = 500) {
+    if (pendingGameOverId || !gameActive) return;
+    gameActive = false;
+    pendingGameOverId = setTimeout(() => {
+      pendingGameOverId = null;
+      gameOver();
+    }, delay);
+  }
+
   // ============================================================
   // ANIMATED SCORE COUNTER
   // ============================================================
@@ -1047,10 +1092,7 @@
     renderPieces(dealtFreshRack);
 
     // Check game over
-    if (!anyMovePossible()) {
-      gameActive = false;
-      setTimeout(gameOver, 500);
-    }
+    if (!anyMovePossible()) scheduleGameOver(500);
 
     saveState();
     drawBoard();
@@ -1236,15 +1278,15 @@
           } else {
             lx = bx; ly = by + boxW - (lightPos - boxW * 3);
           }
-          const lightGrad = ctx.createRadialGradient(lx, ly, 0, lx, ly, cellSize * 1.5);
-          lightGrad.addColorStop(0, "rgba(108, 140, 255, 0.25)");
-          lightGrad.addColorStop(1, "rgba(108, 140, 255, 0)");
-          ctx.strokeStyle = lightGrad;
-          ctx.lineWidth = 3;
+          ctx.save();
+          ctx.globalAlpha = 0.8;
+          ctx.fillStyle = "rgba(108, 140, 255, 0.95)";
+          ctx.shadowColor = "rgba(108, 140, 255, 0.7)";
+          ctx.shadowBlur = cellSize * 0.55;
           ctx.beginPath();
-          roundRect(ctx, bx, by, boxW, boxW, 6);
-          ctx.stroke();
-          ctx.lineWidth = 2;
+          ctx.arc(lx, ly, Math.max(2.5, cellSize * 0.12), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
         }
       }
     }
@@ -1661,10 +1703,7 @@
       }
 
       // Check game over
-      if (!anyMovePossible()) {
-        gameActive = false;
-        setTimeout(gameOver, 500);
-      }
+      if (!anyMovePossible()) scheduleGameOver(500);
 
       saveState();
     }
@@ -1980,13 +2019,14 @@
   // GAME FLOW
   // ============================================================
   function gameOver() {
+    clearGameOverState();
     sfxGameOver();
     stopAmbientShimmer();
 
     // Board shatter effect: explode cells row-by-row with staggered delay
     const app = document.getElementById("app");
     for (let r = 0; r < GRID; r++) {
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         for (let c = 0; c < GRID; c++) {
           if (board[r][c] !== 0) {
             const ci = (board[r][c] - 1) % CELL_COLORS.length;
@@ -2004,10 +2044,11 @@
           app.classList.add("shake");
         }
       }, r * 50);
+      gameOverRowTimeouts.push(timeoutId);
     }
 
     // Big shake after all rows shatter
-    setTimeout(() => {
+    gameOverShakeTimeoutId = setTimeout(() => {
       app.classList.remove("shake-big");
       void app.offsetWidth;
       app.classList.add("shake-big");
@@ -2046,16 +2087,21 @@
       goOverlay.classList.remove("hidden");
     } else {
       // Delay game over modal until ad is dismissed
-      const checkAdClosed = setInterval(() => {
+      gameOverAdPollId = setInterval(() => {
         const adOverlay = document.getElementById("ad-interstitial-overlay");
         if (adOverlay && adOverlay.classList.contains("hidden")) {
-          clearInterval(checkAdClosed);
+          clearInterval(gameOverAdPollId);
+          gameOverAdPollId = null;
           goOverlay.classList.remove("hidden");
         }
       }, 200);
       // Safety timeout: show game over after 15 seconds regardless
-      setTimeout(() => {
-        clearInterval(checkAdClosed);
+      gameOverAdSafetyId = setTimeout(() => {
+        if (gameOverAdPollId) {
+          clearInterval(gameOverAdPollId);
+          gameOverAdPollId = null;
+        }
+        gameOverAdSafetyId = null;
         goOverlay.classList.remove("hidden");
       }, 15000);
     }
@@ -2065,6 +2111,8 @@
   }
 
   function newGame() {
+    clearGameOverState();
+    clearTransientFx();
     goOverlay.classList.add("hidden");
     score = 0;
     displayScore = 0;
@@ -2176,8 +2224,7 @@
         drawBoard();
         renderPieces();
         if (!anyMovePossible()) {
-          gameActive = false;
-          setTimeout(gameOver, 300);
+          scheduleGameOver(300);
         }
         return true;
       } catch {}
