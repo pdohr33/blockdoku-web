@@ -691,6 +691,20 @@
     }
   }
 
+  function startGameOverFireworks() {
+    if (gameOverFireworksId) return;
+    gameOverFireworksId = setInterval(() => {
+      if (!goOverlay.classList.contains("hidden")) {
+        spawnConfetti(30);
+      }
+    }, 1500);
+  }
+
+  function showGameOverOverlay(isNewBest) {
+    goOverlay.classList.remove("hidden");
+    if (isNewBest) startGameOverFireworks();
+  }
+
   function scheduleGameOver(delay = 500) {
     if (pendingGameOverId || !gameActive) return;
     gameActive = false;
@@ -2302,15 +2316,6 @@
       screenFlash("epic");
       sfxNewBest();
       if (navigator.vibrate) navigator.vibrate([80, 50, 80, 50, 80, 50, 120]);
-      // Continuous celebration fireworks every 1.5s while game-over is visible
-      gameOverFireworksId = setInterval(() => {
-        if (!goOverlay.classList.contains("hidden")) {
-          spawnConfetti(30);
-        } else {
-          clearInterval(gameOverFireworksId);
-          gameOverFireworksId = null;
-        }
-      }, 1500);
     } else {
       newBestBanner.classList.add("hidden");
     }
@@ -2320,7 +2325,7 @@
 
     // Show game over after ad (or immediately if no ad)
     if (!adShown) {
-      goOverlay.classList.remove("hidden");
+      showGameOverOverlay(isNewBest);
     } else {
       // Delay game over modal until ad is dismissed
       gameOverAdPollId = setInterval(() => {
@@ -2328,7 +2333,7 @@
         if (adOverlay && adOverlay.classList.contains("hidden")) {
           clearInterval(gameOverAdPollId);
           gameOverAdPollId = null;
-          goOverlay.classList.remove("hidden");
+          showGameOverOverlay(isNewBest);
         }
       }, 200);
       // Safety timeout: show game over after 15 seconds regardless
@@ -2338,7 +2343,7 @@
           gameOverAdPollId = null;
         }
         gameOverAdSafetyId = null;
-        goOverlay.classList.remove("hidden");
+        showGameOverOverlay(isNewBest);
       }, 15000);
     }
 
