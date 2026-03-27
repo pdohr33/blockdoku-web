@@ -126,6 +126,7 @@
   let gameOverShakeTimeoutId = null;
   let gameOverAdPollId = null;
   let gameOverAdSafetyId = null;
+  let countUpAnimIds = new Set();
 
   // --- Level System ---
   // Exponential curve: level N requires N^2 * 50 cumulative XP
@@ -694,6 +695,10 @@
       clearInterval(gameOverFireworksId);
       gameOverFireworksId = null;
     }
+    if (countUpAnimIds.size) {
+      for (const animId of countUpAnimIds) cancelAnimationFrame(animId);
+      countUpAnimIds.clear();
+    }
   }
 
   function startGameOverFireworks() {
@@ -752,7 +757,12 @@
     if (to === from) { el.textContent = to; return; }
     const startTime = performance.now();
     let lastTickVal = from;
+    let frameId = null;
     function tick(now) {
+      if (frameId !== null) {
+        countUpAnimIds.delete(frameId);
+        frameId = null;
+      }
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
@@ -766,9 +776,22 @@
           lastTickVal = val;
         }
       }
-      if (progress < 1) requestAnimationFrame(tick);
+      if (progress < 1) {
+        frameId = requestAnimationFrame(tick);
+        countUpAnimIds.add(frameId);
+      }
     }
-    requestAnimationFrame(tick);
+    frameId = requestAnimationFrame(tick);
+    countUpAnimIds.add(frameId);
+  }
+
+  function triggerPlacementPulse() {
+    if (prefersReducedMotion.matches) return;
+    const bw = document.getElementById("board-wrapper");
+    if (!bw) return;
+    bw.classList.remove("placement-pulse");
+    void bw.offsetWidth;
+    bw.classList.add("placement-pulse");
   }
 
   // ============================================================
@@ -1111,11 +1134,7 @@
     sfxSnap();
     gameStats.piecesPlaced++;
 
-    // Board wrapper pulse on placement
-    const bw = document.getElementById("board-wrapper");
-    bw.classList.remove("placement-pulse");
-    void bw.offsetWidth;
-    bw.classList.add("placement-pulse");
+    triggerPlacementPulse();
 
     // Radial pulse from placement center
     const tapCells = piece.cells;
@@ -1841,11 +1860,7 @@
       sfxSnap();
       gameStats.piecesPlaced++;
 
-      // Board wrapper pulse on placement
-      const bw = document.getElementById("board-wrapper");
-      bw.classList.remove("placement-pulse");
-      void bw.offsetWidth;
-      bw.classList.add("placement-pulse");
+      triggerPlacementPulse();
 
       // Radial pulse from placement center
       const pieceCells = dragPiece.cells;

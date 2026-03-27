@@ -1848,11 +1848,20 @@ h1 {
   .score-box.score-approaching-best,
   .score-box.score-is-best {
     animation: none !important;
-    display: none;
   }
 
   .piece-slot canvas,
   #board-wrapper {
     animation: none !important;
+  }
+
+  .new-best-live,
+  .milestone-banner {
+    transform: translateX(-50%);
+  }
+
+  .score-box.score-approaching-best,
+  .score-box.score-is-best {
+    box-shadow: none !important;
   }
 }
