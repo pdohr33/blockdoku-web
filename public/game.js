@@ -668,42 +668,101 @@
   }
 
   // ============================================================
-  // HINT SYSTEM — show valid placements for a piece
+  // HINT SYSTEM — show valid placements for a piece (tap-to-hint + tap-to-place)
   // ============================================================
   let hintTimeout = null;
+  let hintedPiece = null;
+  let hintedPieceIdx = -1;
+  let hintPlacements = [];
 
-  function showHints(piece) {
-    if (!piece || !gameActive) return;
-    const validCells = new Set();
-    for (let r = 0; r < GRID; r++) {
-      for (let c = 0; c < GRID; c++) {
-        if (canPlace(piece, r, c)) {
-          for (const [dr, dc] of piece.cells) {
-            validCells.add((r + dr) * GRID + (c + dc));
-          }
-        }
-      }
+  function clearHints() {
+    if (hintTimeout) {
+      clearTimeout(hintTimeout);
+      hintTimeout = null;
     }
-    if (validCells.size === 0) return;
+    hintedPiece = null;
+    hintedPieceIdx = -1;
+    hintPlacements = [];
+    const fxCanvas = document.getElementById("fx-layer");
+    if (fxCanvas) {
+      const fxCtx = fxCanvas.getContext("2d");
+      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+    }
+  }
 
-    // Draw hint highlights on fx-layer
+  function showHints(piece, pieceIdx) {
+    if (!piece || !gameActive) return;
+
+    clearHints();
+    hintedPiece = piece;
+    hintedPieceIdx = pieceIdx;
+
     const fxCanvas = document.getElementById("fx-layer");
     const fxCtx = fxCanvas.getContext("2d");
     fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
     fxCtx.fillStyle = "rgba(108, 200, 255, 0.2)";
-    for (const idx of validCells) {
-      const r = Math.floor(idx / GRID);
-      const c = idx % GRID;
-      fxCtx.fillRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
+
+    for (let r = 0; r < GRID; r++) {
+      for (let c = 0; c < GRID; c++) {
+        if (!canPlace(piece, r, c)) continue;
+        hintPlacements.push({ row: r, col: c });
+        for (const [dr, dc] of piece.cells) {
+          fxCtx.fillRect((c + dc) * cellSize + 2, (r + dr) * cellSize + 2, cellSize - 4, cellSize - 4);
+        }
+      }
     }
 
-    // Auto-clear after 1.5s
-    if (hintTimeout) clearTimeout(hintTimeout);
-    hintTimeout = setTimeout(() => {
-      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
-      hintTimeout = null;
-    }, 1500);
+    if (!hintPlacements.length) {
+      clearHints();
+      return;
+    }
+
+    hintTimeout = setTimeout(clearHints, 1500);
   }
+
+  // Tap-to-place: click a highlighted hint cell to place the piece there
+  canvas.addEventListener("click", (e) => {
+    if (!hintedPiece || hintedPieceIdx < 0 || !gameActive) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const tapCol = Math.floor((e.clientX - rect.left) / cellSize);
+    const tapRow = Math.floor((e.clientY - rect.top) / cellSize);
+    const placement = hintPlacements.find(({ row, col }) =>
+      hintedPiece.cells.some(([dr, dc]) => row + dr === tapRow && col + dc === tapCol)
+    );
+
+    if (!placement) return;
+
+    const piece = hintedPiece;
+    const idx = hintedPieceIdx;
+    clearHints();
+
+    // Save undo snapshot
+    undoSnapshot = {
+      board: board.map(r => [...r]),
+      score: score,
+      pieces: pieces.map(p => p ? { cells: p.cells, colorIdx: p.colorIdx } : null),
+      comboCount: comboCount,
+      gameStats: { ...gameStats },
+    };
+    btnUndo.disabled = false;
+
+    placePiece(piece, placement.row, placement.col);
+    sfxPlace();
+    pieces[idx] = null;
+    gameStats.piecesPlaced++;
+    checkAndClear();
+    if (pieces.every(p => !p)) dealPieces();
+    renderPieces(pieces.every(p => !!p));
+    drawBoard();
+
+    if (!hasValidMove()) {
+      gameActive = false;
+      setTimeout(gameOver, 400);
+    } else if (gameMode === "classic") {
+      saveState();
+    }
+  });
 
   // ============================================================
   // DRAWING
@@ -904,7 +963,39 @@
     localStorage.setItem("blockdoku_mode", mode);
   }
 
+  const pieceEntranceTimeouts = new Set();
+
+  function clearPieceEntranceAnimations() {
+    for (const timeoutId of pieceEntranceTimeouts) clearTimeout(timeoutId);
+    pieceEntranceTimeouts.clear();
+    tray.querySelectorAll(".piece-slot").forEach((slot) => {
+      slot.style.opacity = "";
+      slot.style.transform = "";
+      slot.style.transition = "";
+    });
+  }
+
+  function queueEntranceAnimation(slot, idx) {
+    slot.style.opacity = "0";
+    slot.style.transform = "scale(0.5) translateY(10px)";
+    const startId = setTimeout(() => {
+      pieceEntranceTimeouts.delete(startId);
+      slot.style.transition = "opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)";
+      slot.style.opacity = "1";
+      slot.style.transform = "scale(1) translateY(0)";
+      const cleanupId = setTimeout(() => {
+        pieceEntranceTimeouts.delete(cleanupId);
+        slot.style.opacity = "";
+        slot.style.transform = "";
+        slot.style.transition = "";
+      }, 350);
+      pieceEntranceTimeouts.add(cleanupId);
+    }, idx * 100);
+    pieceEntranceTimeouts.add(startId);
+  }
+
   function renderPieces(animate = false) {
+    clearPieceEntranceAnimations();
     const slots = tray.querySelectorAll(".piece-slot");
     slots.forEach((slot, idx) => {
       slot.innerHTML = "";
@@ -913,14 +1004,7 @@
       if (piece) {
         slot.classList.remove("used");
         if (animate) {
-          slot.style.opacity = "0";
-          slot.style.transform = "scale(0.5) translateY(10px)";
-          setTimeout(() => {
-            slot.style.transition = "opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)";
-            slot.style.opacity = "1";
-            slot.style.transform = "scale(1) translateY(0)";
-            setTimeout(() => { slot.style.transition = ""; }, 350);
-          }, idx * 100);
+          queueEntranceAnimation(slot, idx);
         }
         const pCanvas = document.createElement("canvas");
         const pCtx = pCanvas.getContext("2d");
@@ -992,8 +1076,13 @@
   let dragStartY = 0;
   let dragMoved = false;
 
+  function getTapSlopPx() {
+    return Math.max(18, Math.round(cellSize * 0.35));
+  }
+
   function startDrag(idx, clientX, clientY) {
     if (!pieces[idx] || !gameActive) return;
+    clearHints();
     dragPiece = pieces[idx];
     dragIdx = idx;
     dragStartX = clientX;
@@ -1028,10 +1117,11 @@
 
   function moveGhost(clientX, clientY) {
     if (!ghostEl) return;
-    // Track if the user actually dragged vs just tapped
+    // Track if the user actually dragged vs just tapped (adaptive slop for mobile)
     const dx = clientX - dragStartX;
     const dy = clientY - dragStartY;
-    if (dx * dx + dy * dy > 100) dragMoved = true;
+    const tapSlop = getTapSlopPx();
+    if (dx * dx + dy * dy > tapSlop * tapSlop) dragMoved = true;
     // Offset ghost above finger by 2 cells so piece is visible while dragging
     const dragLift = cellSize * 2;
     ghostEl.style.left = (clientX - ghostEl.offsetWidth / 2) + "px";
@@ -1063,6 +1153,7 @@
     // Tap without dragging: show placement hints
     if (!dragMoved) {
       const hintPiece = dragPiece;
+      const hintIdx = dragIdx;
       // Cleanup drag state
       if (ghostEl) { ghostEl.remove(); ghostEl = null; }
       const slot = tray.querySelectorAll(".piece-slot")[dragIdx];
@@ -1072,7 +1163,7 @@
       lastGhostRow = -999;
       lastGhostCol = -999;
       drawBoard();
-      showHints(hintPiece);
+      showHints(hintPiece, hintIdx);
       return;
     }
 
@@ -1472,6 +1563,8 @@
     scoreEl.textContent = "0";
     hideComboBadge();
     clearConfetti();
+    clearHints();
+    clearPieceEntranceAnimations();
 
     // Reset daily RNG for consistent puzzle
     if (gameMode === "daily") {
