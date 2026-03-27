@@ -2524,6 +2524,10 @@
         if (adOverlay && adOverlay.classList.contains("hidden")) {
           clearInterval(gameOverAdPollId);
           gameOverAdPollId = null;
+          if (gameOverAdSafetyId) {
+            clearTimeout(gameOverAdSafetyId);
+            gameOverAdSafetyId = null;
+          }
           showGameOverOverlay(isNewBest);
         }
       }, 200);
