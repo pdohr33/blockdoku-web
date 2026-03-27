@@ -1295,9 +1295,10 @@
   function drawGhost(piece, row, col, valid) {
     drawBoard(); // clears canvas and redraws board
 
-    const pulse = Math.sin(performance.now() * 0.005) * 0.1 + 0.5; // 0.4 - 0.6 pulsing alpha
+    const now = performance.now();
+    const pulse = Math.sin(now * 0.006) * 0.12 + 0.72; // 0.60 - 0.84 — much more visible
+    const dashOffset = (now * 0.04) % 20; // animated marching ants
 
-    // Save and restore context state to prevent alpha/style leaks
     ctx.save();
     try {
       if (valid) {
@@ -1305,47 +1306,119 @@
         const color = CELL_COLORS[ci];
         const lightColor = CELL_COLORS_LIGHT[ci];
 
+        // --- Pass 1: outer glow halo behind all ghost cells ---
+        ctx.shadowColor = lightColor;
+        ctx.shadowBlur = cellSize * 0.5;
+        ctx.globalAlpha = 0.45;
+        ctx.fillStyle = color;
         for (const [dr, dc] of piece.cells) {
           const r = row + dr, c = col + dc;
           if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
           const x = c * cellSize, y = r * cellSize;
-
-          // Glow behind ghost
-          ctx.shadowColor = color;
-          ctx.shadowBlur = 12;
-
-          // Ghost fill with pulse
-          ctx.fillStyle = color;
-          ctx.globalAlpha = pulse;
           ctx.beginPath();
-          roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
+          roundRect(ctx, x + 1, y + 1, cellSize - 2, cellSize - 2, 4);
+          ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+
+        // --- Pass 2: solid filled cells ---
+        ctx.globalAlpha = pulse;
+        for (const [dr, dc] of piece.cells) {
+          const r = row + dr, c = col + dc;
+          if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
+          const x = c * cellSize + 2, y = r * cellSize + 2;
+          const w = cellSize - 4, h = cellSize - 4;
+
+          // Fill
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          roundRect(ctx, x, y, w, h, 4);
           ctx.fill();
 
-          ctx.shadowBlur = 0;
-
-          // Bright border
-          ctx.strokeStyle = lightColor;
-          ctx.lineWidth = 2;
-          ctx.globalAlpha = pulse + 0.15;
+          // Inner highlight (top-left light reflection)
+          ctx.fillStyle = lightColor;
+          ctx.globalAlpha = pulse * 0.45;
           ctx.beginPath();
-          roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
+          roundRect(ctx, x + 2, y + 2, w * 0.45, h * 0.3, 3);
+          ctx.fill();
+          ctx.globalAlpha = pulse;
+        }
+
+        // --- Pass 3: marching-ants dashed border ---
+        ctx.setLineDash([5, 4]);
+        ctx.lineDashOffset = -dashOffset;
+        ctx.strokeStyle = lightColor;
+        ctx.lineWidth = 2.5;
+        ctx.globalAlpha = 0.9;
+        for (const [dr, dc] of piece.cells) {
+          const r = row + dr, c = col + dc;
+          if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
+          const x = c * cellSize + 2, y = r * cellSize + 2;
+          ctx.beginPath();
+          roundRect(ctx, x, y, cellSize - 4, cellSize - 4, 4);
           ctx.stroke();
         }
-      } else {
-        const hoverColor = cachedStyles.hoverInvalid;
+        ctx.setLineDash([]);
+
+        // --- Pass 4: outer contour around the whole piece shape ---
+        // Build a set of occupied cells for outline detection
+        const occupied = new Set();
+        for (const [dr, dc] of piece.cells) {
+          occupied.add((row + dr) + "," + (col + dc));
+        }
+        ctx.strokeStyle = lightColor;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.85;
+        ctx.setLineDash([]);
         for (const [dr, dc] of piece.cells) {
           const r = row + dr, c = col + dc;
           if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
           const x = c * cellSize, y = r * cellSize;
-          ctx.fillStyle = hoverColor;
-          ctx.globalAlpha = 0.5;
+          // Draw edges only where there is no adjacent ghost cell
+          if (!occupied.has((r - 1) + "," + c)) { ctx.beginPath(); ctx.moveTo(x + 1, y + 1); ctx.lineTo(x + cellSize - 1, y + 1); ctx.stroke(); }
+          if (!occupied.has((r + 1) + "," + c)) { ctx.beginPath(); ctx.moveTo(x + 1, y + cellSize - 1); ctx.lineTo(x + cellSize - 1, y + cellSize - 1); ctx.stroke(); }
+          if (!occupied.has(r + "," + (c - 1))) { ctx.beginPath(); ctx.moveTo(x + 1, y + 1); ctx.lineTo(x + 1, y + cellSize - 1); ctx.stroke(); }
+          if (!occupied.has(r + "," + (c + 1))) { ctx.beginPath(); ctx.moveTo(x + cellSize - 1, y + 1); ctx.lineTo(x + cellSize - 1, y + cellSize - 1); ctx.stroke(); }
+        }
+
+      } else {
+        // Invalid placement — red tinted X-pattern overlay
+        for (const [dr, dc] of piece.cells) {
+          const r = row + dr, c = col + dc;
+          if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
+          const x = c * cellSize + 2, y = r * cellSize + 2;
+          const w = cellSize - 4, h = cellSize - 4;
+
+          // Red fill
+          ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
+          ctx.globalAlpha = 1;
           ctx.beginPath();
-          roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
+          roundRect(ctx, x, y, w, h, 4);
           ctx.fill();
+
+          // Red dashed border
+          ctx.setLineDash([4, 3]);
+          ctx.lineDashOffset = -dashOffset;
+          ctx.strokeStyle = "rgba(239, 68, 68, 0.7)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          roundRect(ctx, x, y, w, h, 4);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Small X mark in center of each cell
+          const cx = x + w / 2, cy = y + h / 2;
+          const sz = Math.min(w, h) * 0.2;
+          ctx.strokeStyle = "rgba(239, 68, 68, 0.6)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(cx - sz, cy - sz); ctx.lineTo(cx + sz, cy + sz);
+          ctx.moveTo(cx + sz, cy - sz); ctx.lineTo(cx - sz, cy + sz);
+          ctx.stroke();
         }
       }
     } finally {
-      ctx.restore(); // always restores globalAlpha, fillStyle, etc.
+      ctx.restore();
     }
   }
 
@@ -1533,6 +1606,22 @@
   let dragStartX = 0;
   let dragStartY = 0;
   let dragMoved = false;
+  let ghostAnimId = null;
+
+  // Continuously animate the ghost preview (marching ants, pulse) while dragging
+  function startGhostAnim() {
+    if (ghostAnimId) return;
+    function tick() {
+      if (!dragPiece || lastGhostRow === -999) { ghostAnimId = null; return; }
+      const valid = canPlace(dragPiece, lastGhostRow, lastGhostCol);
+      drawGhost(dragPiece, lastGhostRow, lastGhostCol, valid);
+      ghostAnimId = requestAnimationFrame(tick);
+    }
+    ghostAnimId = requestAnimationFrame(tick);
+  }
+  function stopGhostAnim() {
+    if (ghostAnimId) { cancelAnimationFrame(ghostAnimId); ghostAnimId = null; }
+  }
 
   function getTapSlopPx() {
     return Math.max(18, Math.round(cellSize * 0.35));
@@ -1603,14 +1692,14 @@
     const col = Math.round(bx / cellSize - dragOffsetC);
     const row = Math.round(by / cellSize - dragOffsetR);
 
-    // Only redraw if ghost position changed
+    // Update ghost position — continuous animation handles redraw
     if (row !== lastGhostRow || col !== lastGhostCol) {
       lastGhostRow = row;
       lastGhostCol = col;
       if (row >= -2 && row < GRID + 2 && col >= -2 && col < GRID + 2) {
-        const valid = canPlace(dragPiece, row, col);
-        drawGhost(dragPiece, row, col, valid);
+        startGhostAnim();
       } else {
+        stopGhostAnim();
         drawBoard();
       }
     }
@@ -1624,6 +1713,7 @@
       const hintPiece = dragPiece;
       const hintIdx = dragIdx;
       // Cleanup drag state
+      stopGhostAnim();
       if (ghostEl) { ghostEl.remove(); ghostEl = null; }
       const slot = tray.querySelectorAll(".piece-slot")[dragIdx];
       if (slot) slot.classList.remove("dragging");
@@ -1709,6 +1799,7 @@
     }
 
     // Cleanup
+    stopGhostAnim();
     if (ghostEl) { ghostEl.remove(); ghostEl = null; }
     const slot = tray.querySelectorAll(".piece-slot")[dragIdx];
     if (slot) slot.classList.remove("dragging");
@@ -1768,6 +1859,7 @@
 
   // Safety: if drag state gets stuck, clean it up
   function cancelDrag() {
+    stopGhostAnim();
     if (ghostEl) { ghostEl.remove(); ghostEl = null; }
     if (dragIdx >= 0) {
       const slot = tray.querySelectorAll(".piece-slot")[dragIdx];
@@ -2111,6 +2203,7 @@
   }
 
   function newGame() {
+    stopGhostAnim();
     clearGameOverState();
     clearTransientFx();
     goOverlay.classList.add("hidden");
