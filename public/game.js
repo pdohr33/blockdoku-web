@@ -114,6 +114,11 @@
   // Per-game stats
   let gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
 
+  // Score milestone tracking
+  let lastMilestone = 0;
+  let hasPassedBestThisGame = false;
+  let gameOverFireworksId = null;
+
   // --- Undo State ---
   let undoSnapshot = null; // { board, score, pieces, comboCount, gameStats }
   let pendingGameOverId = null;
@@ -283,6 +288,33 @@
     setTimeout(() => playTone(659, 0.12, "sine", 0.06), 100);
     setTimeout(() => playTone(784, 0.15, "sine", 0.06), 200);
     setTimeout(() => playTone(1047, 0.2, "sine", 0.05), 300);
+  }
+
+  // Triumphant fanfare for passing your best score mid-game
+  function sfxNewBest() {
+    // Ascending major arpeggio with shimmer
+    const notes = [523, 659, 784, 1047, 1319];
+    notes.forEach((freq, i) => {
+      setTimeout(() => {
+        playTone(freq, 0.18, "sine", 0.055);
+        playTone(freq * 1.5, 0.12, "triangle", 0.025);
+      }, i * 70);
+    });
+    // Final triumphant chord
+    setTimeout(() => {
+      playTone(1047, 0.4, "sine", 0.05);
+      playTone(1319, 0.35, "sine", 0.04);
+      playTone(1568, 0.35, "sine", 0.035);
+      playTone(2093, 0.3, "triangle", 0.02);
+    }, notes.length * 70 + 30);
+  }
+
+  // Milestone celebration sound — quick ascending sparkle
+  function sfxMilestone(tier) {
+    const base = 800 + tier * 200;
+    playTone(base, 0.1, "sine", 0.05);
+    setTimeout(() => playTone(base * 1.25, 0.08, "sine", 0.04), 60);
+    setTimeout(() => playTone(base * 1.5, 0.12, "triangle", 0.035), 120);
   }
 
   // ============================================================
@@ -653,6 +685,10 @@
       clearTimeout(gameOverAdSafetyId);
       gameOverAdSafetyId = null;
     }
+    if (gameOverFireworksId) {
+      clearInterval(gameOverFireworksId);
+      gameOverFireworksId = null;
+    }
   }
 
   function scheduleGameOver(delay = 500) {
@@ -940,9 +976,10 @@
       5: "GODLIKE!",
     };
 
+    const multiplier = (1 + combo * 0.5).toFixed(1);
     const el = document.createElement("div");
     el.className = `streak-banner streak-${level}`;
-    el.innerHTML = `<span class="streak-text">${labels[level] || "x" + combo + " COMBO!"}</span>`;
+    el.innerHTML = `<span class="streak-text">${labels[level] || "x" + combo + " COMBO!"}<span class="streak-mult">${multiplier}x</span></span>`;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 1600);
   }
@@ -2051,6 +2088,7 @@
   // SCORING & UI
   // ============================================================
   function addScore(pts) {
+    const prevScore = score;
     score += pts;
     animateScoreTo(score);
 
@@ -2071,10 +2109,48 @@
       setTimeout(() => scoreBoxEl.classList.remove("score-active"), 500);
     }
 
+    // --- Score milestones: celebrate at key thresholds ---
+    const milestones = [100, 250, 500, 1000, 2000, 5000, 10000];
+    for (let i = 0; i < milestones.length; i++) {
+      const m = milestones[i];
+      if (prevScore < m && score >= m && lastMilestone < m) {
+        lastMilestone = m;
+        const tier = i; // 0 = small, 6 = huge
+        showMilestoneBanner(m, tier);
+        sfxMilestone(tier);
+        if (tier >= 2) spawnConfetti(20 + tier * 15);
+        if (tier >= 3) screenFlash("gold");
+        if (tier >= 4) screenFlash("epic");
+        if (navigator.vibrate) navigator.vibrate(tier >= 3 ? [40, 30, 40, 30, 60] : [25]);
+        break; // only one milestone per score event
+      }
+    }
+
+    // --- Approaching best score: glow effect ---
+    if (scoreBoxEl && bestScoreAtGameStart > 0 && !hasPassedBestThisGame) {
+      const threshold = bestScoreAtGameStart * 0.85;
+      if (score >= threshold && score < bestScoreAtGameStart) {
+        scoreBoxEl.classList.add("score-approaching-best");
+      } else {
+        scoreBoxEl.classList.remove("score-approaching-best");
+      }
+    }
+
+    // --- Live new-best detection mid-game ---
     if (score > bestScore) {
       bestScore = score;
       bestEl.textContent = bestScore;
       localStorage.setItem("blockdoku_best", bestScore);
+
+      if (!hasPassedBestThisGame && bestScoreAtGameStart > 0) {
+        hasPassedBestThisGame = true;
+        scoreBoxEl.classList.remove("score-approaching-best");
+        showNewBestLive();
+        sfxNewBest();
+        spawnConfetti(80);
+        screenFlash("epic");
+        if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 80]);
+      }
     }
 
     // Update daily best
@@ -2087,6 +2163,45 @@
 
     // Award XP
     addXP(pts);
+  }
+
+  // Live "NEW BEST!" banner that flies in mid-game
+  function showNewBestLive() {
+    const existing = document.querySelector(".new-best-live");
+    if (existing) existing.remove();
+
+    const el = document.createElement("div");
+    el.className = "new-best-live";
+    el.innerHTML = '<span class="new-best-live-icon">&#9733;</span> NEW BEST! <span class="new-best-live-icon">&#9733;</span>';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2500);
+
+    // Pulse the score box gold
+    if (scoreBoxEl) {
+      scoreBoxEl.classList.add("score-is-best");
+    }
+  }
+
+  // Score milestone banners
+  function showMilestoneBanner(value, tier) {
+    const existing = document.querySelector(".milestone-banner");
+    if (existing) existing.remove();
+
+    const labels = {
+      100: "NICE!",
+      250: "GREAT!",
+      500: "AMAZING!",
+      1000: "INCREDIBLE!",
+      2000: "LEGENDARY!",
+      5000: "GODLIKE!",
+      10000: "TRANSCENDENT!",
+    };
+
+    const el = document.createElement("div");
+    el.className = `milestone-banner milestone-tier-${tier}`;
+    el.innerHTML = `<span class="milestone-value">${value.toLocaleString()}</span><span class="milestone-label">${labels[value] || "WOW!"}</span>`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2000);
   }
 
   function showPerfectClearBanner() {
@@ -2181,10 +2296,21 @@
 
     if (isNewBest) {
       newBestBanner.classList.remove("hidden");
+      newBestBanner.innerHTML = '&#9733; NEW BEST SCORE! &#9733;';
       // Fireworks for new best!
       spawnConfetti(150);
       screenFlash("epic");
+      sfxNewBest();
       if (navigator.vibrate) navigator.vibrate([80, 50, 80, 50, 80, 50, 120]);
+      // Continuous celebration fireworks every 1.5s while game-over is visible
+      gameOverFireworksId = setInterval(() => {
+        if (!goOverlay.classList.contains("hidden")) {
+          spawnConfetti(30);
+        } else {
+          clearInterval(gameOverFireworksId);
+          gameOverFireworksId = null;
+        }
+      }, 1500);
     } else {
       newBestBanner.classList.add("hidden");
     }
@@ -2231,6 +2357,15 @@
     gameActive = true;
     bestScoreAtGameStart = bestScore; // snapshot before game begins
     gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
+    lastMilestone = 0;
+    hasPassedBestThisGame = false;
+    if (gameOverFireworksId) {
+      clearInterval(gameOverFireworksId);
+      gameOverFireworksId = null;
+    }
+    if (scoreBoxEl) {
+      scoreBoxEl.classList.remove("score-approaching-best", "score-is-best");
+    }
     undoSnapshot = null;
     btnUndo.disabled = true;
     scoreEl.textContent = "0";
