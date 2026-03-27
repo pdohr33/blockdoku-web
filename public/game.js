@@ -200,29 +200,72 @@
   function sfxPlace() {
     playTone(600, 0.08, "sine", 0.05);
     playTone(900, 0.06, "sine", 0.03);
-    playTone(1200, 0.04, "sine", 0.02); // extra sparkle
+    playTone(1200, 0.04, "sine", 0.02);
   }
 
+  // Musical clear: major chord with harmonic richness
   function sfxClear(count) {
-    const baseFreq = 500 + count * 100;
-    playTone(baseFreq, 0.12, "sine", 0.06);
-    setTimeout(() => playTone(baseFreq + 200, 0.12, "sine", 0.06), 60);
+    // C major chord rooted higher for each additional clear
+    const roots = [523, 587, 659, 784, 880]; // C5, D5, E5, G5, A5
+    const root = roots[Math.min(count - 1, roots.length - 1)];
+    // Root
+    playTone(root, 0.18, "sine", 0.06);
+    // Major third
+    setTimeout(() => playTone(root * 1.26, 0.16, "sine", 0.05), 40);
+    // Fifth
+    setTimeout(() => playTone(root * 1.5, 0.14, "sine", 0.04), 80);
+    // Octave shimmer for big clears
     if (count > 1) {
-      setTimeout(() => playTone(baseFreq + 400, 0.15, "sine", 0.06), 120);
+      setTimeout(() => playTone(root * 2, 0.2, "triangle", 0.03), 120);
+    }
+    if (count > 2) {
+      setTimeout(() => playTone(root * 2.52, 0.25, "triangle", 0.025), 160);
     }
   }
 
+  // Rising arpeggio that escalates with combo count
   function sfxCombo(count) {
-    const baseFreq = 600 + count * 150;
-    for (let i = 0; i < Math.min(count, 4); i++) {
-      setTimeout(() => playTone(baseFreq + i * 100, 0.1, "sine", 0.05), i * 60);
+    const scale = [523, 587, 659, 784, 880, 988, 1047, 1175]; // C major scale
+    const notes = Math.min(count + 1, scale.length);
+    for (let i = 0; i < notes; i++) {
+      setTimeout(() => {
+        playTone(scale[i], 0.12, "sine", 0.045);
+        // Add harmony on higher combos
+        if (count >= 3 && i > 0) {
+          playTone(scale[i] * 1.5, 0.08, "triangle", 0.02);
+        }
+      }, i * 50);
+    }
+    // Triumphant final chord at combo 5+
+    if (count >= 5) {
+      setTimeout(() => {
+        playTone(1047, 0.3, "sine", 0.05);
+        playTone(1319, 0.3, "sine", 0.04);
+        playTone(1568, 0.35, "triangle", 0.03);
+      }, notes * 50 + 30);
     }
   }
 
   function sfxGameOver() {
-    playTone(300, 0.3, "sawtooth", 0.04);
-    setTimeout(() => playTone(200, 0.4, "sawtooth", 0.04), 150);
-    setTimeout(() => playTone(150, 0.5, "sawtooth", 0.03), 300);
+    // Dramatic descending minor chord
+    playTone(392, 0.4, "sawtooth", 0.035);
+    playTone(466, 0.35, "sine", 0.03);
+    setTimeout(() => {
+      playTone(330, 0.45, "sawtooth", 0.035);
+      playTone(392, 0.4, "sine", 0.03);
+    }, 200);
+    setTimeout(() => {
+      playTone(262, 0.6, "sawtooth", 0.03);
+      playTone(311, 0.55, "sine", 0.025);
+    }, 400);
+    // Low rumble
+    setTimeout(() => playTone(110, 0.8, "sawtooth", 0.02), 550);
+  }
+
+  // Satisfying snap sound on valid placement
+  function sfxSnap() {
+    playTone(1400, 0.03, "square", 0.04);
+    playTone(2000, 0.02, "sine", 0.025);
   }
 
   function sfxUndo() {
@@ -311,7 +354,6 @@
   }
 
   function drawParticles() {
-    fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
     for (const p of particles) {
       fxCtx.globalAlpha = p.life;
       fxCtx.fillStyle = p.color;
@@ -338,17 +380,133 @@
     fxCtx.shadowBlur = 0;
   }
 
-  // Animation loop for particles - only runs when particles exist (battery friendly)
+  // ============================================================
+  // RADIAL PULSE SYSTEM (placement ripple)
+  // ============================================================
+  let pulses = [];
+
+  function spawnRadialPulse(cx, cy, color, maxRadius) {
+    if (prefersReducedMotion.matches) return;
+    pulses.push({
+      x: cx, y: cy,
+      radius: 0,
+      maxRadius: maxRadius || cellSize * 2.5,
+      life: 1,
+      color,
+    });
+    ensureAnimRunning();
+  }
+
+  function updatePulses() {
+    for (let i = pulses.length - 1; i >= 0; i--) {
+      const p = pulses[i];
+      p.life -= 0.025;
+      p.radius += (p.maxRadius - p.radius) * 0.12;
+      if (p.life <= 0) pulses.splice(i, 1);
+    }
+  }
+
+  function drawPulses() {
+    for (const p of pulses) {
+      fxCtx.beginPath();
+      fxCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      fxCtx.strokeStyle = p.color;
+      fxCtx.lineWidth = 2 * p.life;
+      fxCtx.globalAlpha = p.life * 0.5;
+      fxCtx.stroke();
+    }
+    fxCtx.globalAlpha = 1;
+  }
+
+  // ============================================================
+  // CLEAR SWEEP SYSTEM (white wipe across cleared lines)
+  // ============================================================
+  let sweeps = [];
+
+  function spawnClearSweep(cells) {
+    if (prefersReducedMotion.matches) return;
+    // Group cells by row and column to create directional sweeps
+    const rows = new Map();
+    const cols = new Map();
+    for (const idx of cells) {
+      const r = Math.floor(idx / GRID);
+      const c = idx % GRID;
+      if (!rows.has(r)) rows.set(r, []);
+      rows.get(r).push(c);
+      if (!cols.has(c)) cols.set(c, []);
+      cols.get(c).push(r);
+    }
+    // Horizontal sweeps for full rows
+    for (const [r, colList] of rows) {
+      if (colList.length >= GRID) {
+        sweeps.push({
+          type: "h", row: r,
+          progress: 0, speed: 0.04,
+        });
+      }
+    }
+    // Vertical sweeps for full columns
+    for (const [c, rowList] of cols) {
+      if (rowList.length >= GRID) {
+        sweeps.push({
+          type: "v", col: c,
+          progress: 0, speed: 0.04,
+        });
+      }
+    }
+    ensureAnimRunning();
+  }
+
+  function updateSweeps() {
+    for (let i = sweeps.length - 1; i >= 0; i--) {
+      sweeps[i].progress += sweeps[i].speed;
+      if (sweeps[i].progress > 1.3) sweeps.splice(i, 1);
+    }
+  }
+
+  function drawSweeps() {
+    for (const s of sweeps) {
+      const alpha = Math.max(0, 1 - s.progress);
+      fxCtx.globalAlpha = alpha * 0.7;
+      if (s.type === "h") {
+        const y = s.row * cellSize;
+        const sweepX = s.progress * boardPx;
+        const grad = fxCtx.createLinearGradient(sweepX - cellSize, y, sweepX, y);
+        grad.addColorStop(0, "rgba(255,255,255,0)");
+        grad.addColorStop(0.5, "rgba(255,255,255,0.9)");
+        grad.addColorStop(1, "rgba(255,255,255,0)");
+        fxCtx.fillStyle = grad;
+        fxCtx.fillRect(sweepX - cellSize, y, cellSize, cellSize);
+      } else {
+        const x = s.col * cellSize;
+        const sweepY = s.progress * boardPx;
+        const grad = fxCtx.createLinearGradient(x, sweepY - cellSize, x, sweepY);
+        grad.addColorStop(0, "rgba(255,255,255,0)");
+        grad.addColorStop(0.5, "rgba(255,255,255,0.9)");
+        grad.addColorStop(1, "rgba(255,255,255,0)");
+        fxCtx.fillStyle = grad;
+        fxCtx.fillRect(x, sweepY - cellSize, cellSize, cellSize);
+      }
+    }
+    fxCtx.globalAlpha = 1;
+  }
+
+  // Animation loop for particles/pulses/sweeps
   let animFrameId = null;
   let animRunning = false;
 
   function animLoop() {
-    if (particles.length > 0) {
+    const hasWork = particles.length > 0 || pulses.length > 0 || sweeps.length > 0;
+    if (hasWork) {
       updateParticles();
+      updatePulses();
+      updateSweeps();
+      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+      drawSweeps();
+      drawPulses();
       drawParticles();
       animFrameId = requestAnimationFrame(animLoop);
     } else {
-      // No particles left, stop the loop to save battery
       fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
       animRunning = false;
       animFrameId = null;
@@ -623,6 +781,9 @@
     // Spawn particles BEFORE clearing
     spawnClearParticles([...clearSet]);
 
+    // Sweep effect across cleared lines
+    spawnClearSweep([...clearSet]);
+
     // Clear cells with staggered animation
     animateClearStaggered([...clearSet]);
 
@@ -836,14 +997,26 @@
     triggerPlacementPop(piece, placement.row, placement.col);
     placePiece(piece, placement.row, placement.col);
     sfxPlace();
+    sfxSnap();
     gameStats.piecesPlaced++;
 
+    // Radial pulse from placement center
+    const tapCells = piece.cells;
+    let tapCX = 0, tapCY = 0;
+    for (const [dr, dc] of tapCells) {
+      tapCX += (placement.col + dc) * cellSize + cellSize / 2;
+      tapCY += (placement.row + dr) * cellSize + cellSize / 2;
+    }
+    tapCX /= tapCells.length;
+    tapCY /= tapCells.length;
+    const tapCI = (piece.colorIdx - 1) % CELL_COLORS.length;
+    spawnRadialPulse(tapCX, tapCY, CELL_COLORS_LIGHT[tapCI]);
+
     // Spawn placement sparkles
-    for (const [dr, dc] of piece.cells) {
+    for (const [dr, dc] of tapCells) {
       const px = (placement.col + dc) * cellSize + cellSize / 2;
       const py = (placement.row + dr) * cellSize + cellSize / 2;
-      const ci = (piece.colorIdx - 1) % CELL_COLORS.length;
-      spawnParticles(px, py, CELL_COLORS_LIGHT[ci], 3, { speedMult: 0.6, sizeMult: 0.7, sparkle: true });
+      spawnParticles(px, py, CELL_COLORS_LIGHT[tapCI], 3, { speedMult: 0.6, sizeMult: 0.7, sparkle: true });
     }
 
     // Score for placing (mirrors drag path)
@@ -1035,14 +1208,44 @@
       }
     }
 
-    // 3x3 box outlines
-    ctx.strokeStyle = gridLine;
+    // 3x3 box outlines with traveling light
     ctx.lineWidth = 2;
+    const boxW = cellSize * 3;
     for (let br = 0; br < 3; br++) {
       for (let bc = 0; bc < 3; bc++) {
+        const bx = bc * boxW + 0.5;
+        const by = br * boxW + 0.5;
+
+        // Base grid line
+        ctx.strokeStyle = gridLine;
         ctx.beginPath();
-        roundRect(ctx, bc * cellSize * 3 + 0.5, br * cellSize * 3 + 0.5, cellSize * 3, cellSize * 3, 6);
+        roundRect(ctx, bx, by, boxW, boxW, 6);
         ctx.stroke();
+
+        // Traveling light pulse along edges
+        if (!prefersReducedMotion.matches && shimmerPhase > 0) {
+          const perimeter = boxW * 4;
+          const lightPos = ((shimmerPhase * 40 + br * 120 + bc * 80) % perimeter);
+          let lx, ly;
+          if (lightPos < boxW) {
+            lx = bx + lightPos; ly = by;
+          } else if (lightPos < boxW * 2) {
+            lx = bx + boxW; ly = by + (lightPos - boxW);
+          } else if (lightPos < boxW * 3) {
+            lx = bx + boxW - (lightPos - boxW * 2); ly = by + boxW;
+          } else {
+            lx = bx; ly = by + boxW - (lightPos - boxW * 3);
+          }
+          const lightGrad = ctx.createRadialGradient(lx, ly, 0, lx, ly, cellSize * 1.5);
+          lightGrad.addColorStop(0, "rgba(108, 140, 255, 0.25)");
+          lightGrad.addColorStop(1, "rgba(108, 140, 255, 0)");
+          ctx.strokeStyle = lightGrad;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          roundRect(ctx, bx, by, boxW, boxW, 6);
+          ctx.stroke();
+          ctx.lineWidth = 2;
+        }
       }
     }
   }
@@ -1413,14 +1616,26 @@
       triggerPlacementPop(dragPiece, row, col);
       placePiece(dragPiece, row, col);
       sfxPlace();
+      sfxSnap();
       gameStats.piecesPlaced++;
 
+      // Radial pulse from placement center
+      const pieceCells = dragPiece.cells;
+      let centerX = 0, centerY = 0;
+      for (const [dr, dc] of pieceCells) {
+        centerX += (col + dc) * cellSize + cellSize / 2;
+        centerY += (row + dr) * cellSize + cellSize / 2;
+      }
+      centerX /= pieceCells.length;
+      centerY /= pieceCells.length;
+      const ci2 = (dragPiece.colorIdx - 1) % CELL_COLORS.length;
+      spawnRadialPulse(centerX, centerY, CELL_COLORS_LIGHT[ci2]);
+
       // Spawn placement sparkles
-      for (const [dr, dc] of dragPiece.cells) {
+      for (const [dr, dc] of pieceCells) {
         const px = (col + dc) * cellSize + cellSize / 2;
         const py = (row + dr) * cellSize + cellSize / 2;
-        const ci = (dragPiece.colorIdx - 1) % CELL_COLORS.length;
-        spawnParticles(px, py, CELL_COLORS_LIGHT[ci], 3, { speedMult: 0.6, sizeMult: 0.7, sparkle: true });
+        spawnParticles(px, py, CELL_COLORS_LIGHT[ci2], 3, { speedMult: 0.6, sizeMult: 0.7, sparkle: true });
       }
 
       // Score for placing
@@ -1768,23 +1983,35 @@
     sfxGameOver();
     stopAmbientShimmer();
 
-    // Board shatter effect: explode all remaining cells outward
+    // Board shatter effect: explode cells row-by-row with staggered delay
+    const app = document.getElementById("app");
     for (let r = 0; r < GRID; r++) {
-      for (let c = 0; c < GRID; c++) {
-        if (board[r][c] !== 0) {
-          const ci = (board[r][c] - 1) % CELL_COLORS.length;
-          const x = c * cellSize + cellSize / 2;
-          const y = r * cellSize + cellSize / 2;
-          spawnParticles(x, y, CELL_COLORS[ci], 3, { speedMult: 1.5, sizeMult: 1.2 });
+      setTimeout(() => {
+        for (let c = 0; c < GRID; c++) {
+          if (board[r][c] !== 0) {
+            const ci = (board[r][c] - 1) % CELL_COLORS.length;
+            const x = c * cellSize + cellSize / 2;
+            const y = r * cellSize + cellSize / 2;
+            spawnParticles(x, y, CELL_COLORS[ci], 4, { speedMult: 2, sizeMult: 1.3 });
+            board[r][c] = 0;
+          }
         }
-      }
+        drawBoard();
+        // Mini-shake per row
+        if (r % 2 === 0) {
+          app.classList.remove("shake");
+          void app.offsetWidth;
+          app.classList.add("shake");
+        }
+      }, r * 50);
     }
 
-    // Screen shake on game over
-    const app = document.getElementById("app");
-    app.classList.remove("shake-big");
-    void app.offsetWidth;
-    app.classList.add("shake-big");
+    // Big shake after all rows shatter
+    setTimeout(() => {
+      app.classList.remove("shake-big");
+      void app.offsetWidth;
+      app.classList.add("shake-big");
+    }, GRID * 50 + 50);
 
     screenFlash("combo");
 
