@@ -323,15 +323,31 @@
   let confettiCtx = null;
   let confettiAnimId = null;
 
+  function resizeConfettiCanvas() {
+    if (!confettiCanvas) return;
+    confettiCanvas.width = window.innerWidth;
+    confettiCanvas.height = window.innerHeight;
+  }
+
+  function clearConfetti() {
+    confettiPieces = [];
+    if (confettiAnimId) {
+      cancelAnimationFrame(confettiAnimId);
+      confettiAnimId = null;
+    }
+    if (confettiCanvas && confettiCtx) {
+      confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    }
+  }
+
   function getConfettiCanvas() {
     if (!confettiCanvas) {
       confettiCanvas = document.createElement("canvas");
       confettiCanvas.id = "confetti-layer";
-      confettiCanvas.width = window.innerWidth;
-      confettiCanvas.height = window.innerHeight;
       document.body.appendChild(confettiCanvas);
       confettiCtx = confettiCanvas.getContext("2d");
     }
+    resizeConfettiCanvas();
     return confettiCtx;
   }
 
@@ -1108,6 +1124,7 @@
     comboCount = undoSnapshot.comboCount;
     gameStats = undoSnapshot.gameStats;
 
+    displayScore = score;
     scoreEl.textContent = score;
     undoSnapshot = null;
     btnUndo.disabled = true;
@@ -1348,6 +1365,7 @@
     btnUndo.disabled = true;
     scoreEl.textContent = "0";
     hideComboBadge();
+    clearConfetti();
 
     // Reset daily RNG for consistent puzzle
     if (gameMode === "daily") {
@@ -1421,10 +1439,14 @@
     localStorage.setItem("blockdoku_state", JSON.stringify(state));
   }
 
-  function loadState() {
+  function loadBestScore() {
     bestScore = parseInt(localStorage.getItem("blockdoku_best") || "0");
     bestScoreAtGameStart = bestScore;
     bestEl.textContent = bestScore;
+  }
+
+  function loadState() {
+    loadBestScore();
 
     const saved = localStorage.getItem("blockdoku_state");
     if (saved) {
@@ -1477,7 +1499,10 @@
   // EVENT LISTENERS
   // ============================================================
   playAgainBtn.addEventListener("click", newGame);
-  window.addEventListener("resize", resize);
+  window.addEventListener("resize", () => {
+    resize();
+    resizeConfettiCanvas();
+  });
 
   // Toolbar
   btnStats.addEventListener("click", showStats);
@@ -1529,6 +1554,7 @@
   // INIT
   // ============================================================
   initBoard();
+  loadBestScore();
 
   // IMPORTANT: resize first so cellSize/boardPx are valid before any drawing
   refreshCachedStyles();
