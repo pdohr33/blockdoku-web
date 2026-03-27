@@ -180,8 +180,30 @@
           <span class="score-label">Best</span>
           <span id="best-score" class="score-value">0</span>
         </div>
+        <div class="score-box level-box">
+          <span class="score-label">Level</span>
+          <span id="level-badge" class="score-value">1</span>
+          <div id="xp-bar-wrapper">
+            <div id="xp-bar-fill"></div>
+          </div>
+        </div>
       </div>
     </header>
+
+    <!-- Mode Selector -->
+    <div id="mode-selector">
+      <button class="mode-btn active" id="mode-classic" data-mode="classic">Classic</button>
+      <button class="mode-btn" id="mode-daily" data-mode="daily">
+        Daily Challenge
+        <span id="daily-badge" class="daily-badge"></span>
+      </button>
+    </div>
+
+    <!-- Daily Challenge Info Bar (hidden in classic mode) -->
+    <div id="daily-info" class="hidden">
+      <span id="daily-date"></span>
+      <span id="daily-best-label">Today's Best: <strong id="daily-best-val">0</strong></span>
+    </div>
 
     <!-- Above-the-fold SEO tagline (minimal, doesn't interfere with gameplay) -->
     <p id="atf-tagline">Free online block puzzle game. Place blocks, clear lines, beat your high score.</p>
@@ -215,6 +237,9 @@
         <svg id="icon-sound-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         <svg id="icon-sound-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hidden"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
       </button>
+      <button id="btn-undo" title="Undo last move" aria-label="Undo last move" disabled>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      </button>
       <button id="btn-newgame" title="New Game" aria-label="New game">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
       </button>
@@ -240,8 +265,18 @@
           <div class="go-stat"><span class="go-stat-val" id="go-combos">0</span><span class="go-stat-lbl">Combos</span></div>
           <div class="go-stat"><span class="go-stat-val" id="go-pieces">0</span><span class="go-stat-lbl">Pieces</span></div>
         </div>
-        <div id="new-best-banner" class="hidden">🏆 New Best!</div>
-        <button class="btn-primary" id="play-again-btn">Play Again</button>
+        <div id="go-level" class="go-stat-row">
+          <span class="go-stat-lbl">Level</span>
+          <span class="go-stat-val" id="go-level-val">1</span>
+        </div>
+        <div id="new-best-banner" class="hidden">New Best!</div>
+        <div id="go-buttons">
+          <button class="btn-primary" id="play-again-btn">Play Again</button>
+          <button class="btn-secondary" id="share-score-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Share Score
+          </button>
+        </div>
       </div>
     </div>
 
@@ -328,6 +363,15 @@
         </div>
         <div id="ad-interstitial-container"></div>
       </div>
+    </div>
+
+    <!-- Share toast -->
+    <div id="share-toast" class="hidden">Copied!</div>
+
+    <!-- Level-up overlay -->
+    <div id="level-up-overlay" class="hidden">
+      <div id="level-up-text">Level Up!</div>
+      <div id="level-up-num"></div>
     </div>
 
     <!-- Ad: Bottom banner (sticky) -->
