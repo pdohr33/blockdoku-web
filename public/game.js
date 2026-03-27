@@ -683,6 +683,7 @@
     particles = [];
     pulses = [];
     sweeps = [];
+    placedCells = [];
     if (animFrameId) cancelAnimationFrame(animFrameId);
     animFrameId = null;
     animRunning = false;
@@ -1345,8 +1346,8 @@
       const [dr, dc] = piece.cells[i];
       placedCells.push({ r: row + dr, c: col + dc, time: now + i * 30, color });
     }
-    // Clean up old entries after animation
-    setTimeout(() => {
+    // Keep placement-pop cleanup owned so restarts cannot mutate a fresh run.
+    queueTransientTimeout(() => {
       placedCells = placedCells.filter(p => performance.now() - p.time < 350);
     }, 500);
   }
@@ -2285,7 +2286,7 @@
       scoreBoxEl.classList.remove("score-active");
       void scoreBoxEl.offsetWidth;
       scoreBoxEl.classList.add("score-active");
-      setTimeout(() => scoreBoxEl.classList.remove("score-active"), 500);
+      queueTransientTimeout(() => scoreBoxEl.classList.remove("score-active"), 500);
     }
 
     // --- Score milestones: celebrate at key thresholds ---
