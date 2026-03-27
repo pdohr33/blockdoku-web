@@ -129,6 +129,7 @@
   let gameOverVignetteTimeoutId = null;
   let gameOverVignetteEl = null;
   let countUpAnimIds = new Set();
+  let transientTimeoutIds = new Set();
 
   // --- Level System ---
   // Exponential curve: level N requires N^2 * 50 cumulative XP
@@ -321,6 +322,15 @@
     playTone(base, 0.1, "sine", 0.05);
     setTimeout(() => playTone(base * 1.25, 0.08, "sine", 0.04), 60);
     setTimeout(() => playTone(base * 1.5, 0.12, "triangle", 0.035), 120);
+  }
+
+  function queueTransientTimeout(fn, delay) {
+    const timeoutId = setTimeout(() => {
+      transientTimeoutIds.delete(timeoutId);
+      fn();
+    }, delay);
+    transientTimeoutIds.add(timeoutId);
+    return timeoutId;
   }
 
   // Quick tick sound for game-over score count-up
@@ -664,10 +674,12 @@
     const el = document.createElement("div");
     el.className = "screen-flash " + type;
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 450);
+    queueTransientTimeout(() => el.remove(), 450);
   }
 
   function clearTransientFx() {
+    for (const timeoutId of transientTimeoutIds) clearTimeout(timeoutId);
+    transientTimeoutIds.clear();
     particles = [];
     pulses = [];
     sweeps = [];
@@ -675,6 +687,11 @@
     animFrameId = null;
     animRunning = false;
     fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+    document.querySelectorAll(
+      ".screen-flash, .streak-banner, .new-best-live, .milestone-banner, .perfect-clear-banner, .float-score"
+    ).forEach((el) => el.remove());
+    if (shareToast) shareToast.classList.add("hidden");
+    if (levelUpOverlay) levelUpOverlay.classList.add("hidden");
   }
 
   function clearGameOverState() {
@@ -1062,7 +1079,7 @@
     el.className = `streak-banner streak-${level}`;
     el.innerHTML = `<span class="streak-text">${labels[level] || "x" + combo + " COMBO!"}<span class="streak-mult">${multiplier}x</span></span>`;
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 1600);
+    queueTransientTimeout(() => el.remove(), 1600);
   }
 
   function anyMovePossible() {
@@ -2186,7 +2203,7 @@
     }
     ensureAnimRunning();
 
-    setTimeout(() => {
+    queueTransientTimeout(() => {
       levelUpOverlay.classList.add("hidden");
     }, 1500);
   }
@@ -2236,7 +2253,7 @@
     shareToast.style.animation = "none";
     void shareToast.offsetWidth;
     shareToast.style.animation = "";
-    setTimeout(() => shareToast.classList.add("hidden"), 2000);
+    queueTransientTimeout(() => shareToast.classList.add("hidden"), 2000);
   }
 
   // ============================================================
@@ -2336,7 +2353,7 @@
     el.className = "new-best-live";
     el.innerHTML = '<span class="new-best-live-icon">&#9733;</span> NEW BEST! <span class="new-best-live-icon">&#9733;</span>';
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2500);
+    queueTransientTimeout(() => el.remove(), 2500);
 
     // Pulse the score box gold
     if (scoreBoxEl) {
@@ -2363,7 +2380,7 @@
     el.className = `milestone-banner milestone-tier-${tier}`;
     el.innerHTML = `<span class="milestone-value">${value.toLocaleString()}</span><span class="milestone-label">${labels[value] || "WOW!"}</span>`;
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2000);
+    queueTransientTimeout(() => el.remove(), 2000);
   }
 
   function showPerfectClearBanner() {
@@ -2371,7 +2388,7 @@
     el.className = "perfect-clear-banner";
     el.textContent = "PERFECT CLEAR! +50";
     document.getElementById("app").appendChild(el);
-    setTimeout(() => el.remove(), 2000);
+    queueTransientTimeout(() => el.remove(), 2000);
   }
 
   function showFloatScore(pts, x, y, big) {
@@ -2381,7 +2398,7 @@
     el.style.left = x + "px";
     el.style.top = y + "px";
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 900);
+    queueTransientTimeout(() => el.remove(), 900);
   }
 
   function showComboBadge(count) {
