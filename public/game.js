@@ -8,6 +8,35 @@
   // --- Constants ---
   const GRID = 9;
   const BOX = 3;
+
+  // --- Game Mode ---
+  let gameMode = "classic"; // "classic" or "daily"
+
+  // ============================================================
+  // SEEDED RNG (for Daily Challenge)
+  // ============================================================
+  function mulberry32(seed) {
+    return function() {
+      let t = seed += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function getDailySeed() {
+    const d = new Date();
+    const dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    let hash = 0;
+    for (let i = 0; i < dateStr.length; i++) {
+      const ch = dateStr.charCodeAt(i);
+      hash = ((hash << 5) - hash) + ch;
+      hash |= 0;
+    }
+    return { seed: hash, dateStr };
+  }
+
+  let dailyRng = null; // seeded RNG instance for daily mode
   const CELL_COLORS = [
     "#ff3b7a", "#a855f7", "#6366f1", "#3b82f6",
     "#22d3ee", "#10b981", "#f59e0b", "#ef4444",
@@ -75,9 +104,26 @@
   let gameActive = true;
   let initialized = false;
   let bestScoreAtGameStart = 0; // track pre-game best for "New Best!" check
+  let dailyBestScore = 0;
+  let dailyDateStr = "";
+
+  // --- Animated Score Counter ---
+  let displayScore = 0;
+  let scoreAnimId = null;
 
   // Per-game stats
   let gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
+
+  // --- Undo State ---
+  let undoSnapshot = null; // { board, score, pieces, comboCount, gameStats }
+
+  // --- Level System ---
+  // Exponential curve: level N requires N^2 * 50 cumulative XP
+  function xpForLevel(lvl) {
+    return Math.floor(lvl * lvl * 50);
+  }
+  let playerXP = 0;
+  let playerLevel = 1;
 
   // --- DOM Elements ---
   const canvas = document.getElementById("board");
@@ -111,6 +157,18 @@
   const btnTheme = document.getElementById("btn-theme");
   const btnSound = document.getElementById("btn-sound");
   const btnNewgame = document.getElementById("btn-newgame");
+  const btnUndo = document.getElementById("btn-undo");
+
+  // Level
+  const levelBadge = document.getElementById("level-badge");
+  const xpBarFill = document.getElementById("xp-bar-fill");
+  const levelUpOverlay = document.getElementById("level-up-overlay");
+  const levelUpNum = document.getElementById("level-up-num");
+  const goLevelVal = document.getElementById("go-level-val");
+
+  // Share
+  const shareBtn = document.getElementById("share-score-btn");
+  const shareToast = document.getElementById("share-toast");
 
   // ============================================================
   // AUDIO SYSTEM
@@ -162,6 +220,18 @@
     playTone(300, 0.3, "sawtooth", 0.04);
     setTimeout(() => playTone(200, 0.4, "sawtooth", 0.04), 150);
     setTimeout(() => playTone(150, 0.5, "sawtooth", 0.03), 300);
+  }
+
+  function sfxUndo() {
+    playTone(400, 0.08, "sine", 0.04);
+    setTimeout(() => playTone(300, 0.1, "sine", 0.03), 50);
+  }
+
+  function sfxLevelUp() {
+    playTone(523, 0.12, "sine", 0.06);
+    setTimeout(() => playTone(659, 0.12, "sine", 0.06), 100);
+    setTimeout(() => playTone(784, 0.15, "sine", 0.06), 200);
+    setTimeout(() => playTone(1047, 0.2, "sine", 0.05), 300);
   }
 
   // ============================================================
@@ -246,6 +316,117 @@
   }
 
   // ============================================================
+  // CONFETTI SYSTEM (big celebrations)
+  // ============================================================
+  let confettiPieces = [];
+  let confettiCanvas = null;
+  let confettiCtx = null;
+  let confettiAnimId = null;
+
+  function getConfettiCanvas() {
+    if (!confettiCanvas) {
+      confettiCanvas = document.createElement("canvas");
+      confettiCanvas.id = "confetti-layer";
+      confettiCanvas.width = window.innerWidth;
+      confettiCanvas.height = window.innerHeight;
+      document.body.appendChild(confettiCanvas);
+      confettiCtx = confettiCanvas.getContext("2d");
+    }
+    return confettiCtx;
+  }
+
+  function spawnConfetti(count) {
+    getConfettiCanvas();
+    const w = confettiCanvas.width;
+    const colors = ["#ff3b7a", "#a855f7", "#3b82f6", "#22d3ee", "#10b981", "#f59e0b", "#ef4444", "#ffb547"];
+    for (let i = 0; i < count; i++) {
+      confettiPieces.push({
+        x: w * 0.1 + Math.random() * w * 0.8,
+        y: -10 - Math.random() * 40,
+        vx: (Math.random() - 0.5) * 6,
+        vy: 2 + Math.random() * 5,
+        rot: Math.random() * Math.PI * 2,
+        rotV: (Math.random() - 0.5) * 0.3,
+        w: 4 + Math.random() * 6,
+        h: 8 + Math.random() * 8,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        life: 1,
+        decay: 0.003 + Math.random() * 0.004,
+      });
+    }
+    if (!confettiAnimId) confettiLoop();
+  }
+
+  function confettiLoop() {
+    if (!confettiPieces.length) {
+      if (confettiCanvas) {
+        confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+      }
+      confettiAnimId = null;
+      return;
+    }
+    confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    for (let i = confettiPieces.length - 1; i >= 0; i--) {
+      const c = confettiPieces[i];
+      c.x += c.vx;
+      c.y += c.vy;
+      c.vy += 0.08;
+      c.vx *= 0.99;
+      c.rot += c.rotV;
+      c.life -= c.decay;
+      if (c.life <= 0 || c.y > confettiCanvas.height + 20) {
+        confettiPieces.splice(i, 1);
+        continue;
+      }
+      confettiCtx.save();
+      confettiCtx.translate(c.x, c.y);
+      confettiCtx.rotate(c.rot);
+      confettiCtx.globalAlpha = c.life;
+      confettiCtx.fillStyle = c.color;
+      confettiCtx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h);
+      confettiCtx.restore();
+    }
+    confettiAnimId = requestAnimationFrame(confettiLoop);
+  }
+
+  // Screen flash effect
+  function screenFlash(type) {
+    const el = document.createElement("div");
+    el.className = "screen-flash " + type;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 450);
+  }
+
+  // ============================================================
+  // ANIMATED SCORE COUNTER
+  // ============================================================
+  function animateScoreTo(target) {
+    if (scoreAnimId) cancelAnimationFrame(scoreAnimId);
+    const start = displayScore;
+    const diff = target - start;
+    if (diff <= 0) { displayScore = target; scoreEl.textContent = target; return; }
+    const duration = Math.min(400, Math.max(150, diff * 3));
+    const startTime = performance.now();
+
+    function tick(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      displayScore = Math.round(start + diff * eased);
+      scoreEl.textContent = displayScore;
+      if (progress < 1) {
+        scoreAnimId = requestAnimationFrame(tick);
+      } else {
+        displayScore = target;
+        scoreEl.textContent = target;
+        scoreAnimId = null;
+      }
+    }
+    scoreAnimId = requestAnimationFrame(tick);
+  }
+
+  // ============================================================
   // SIZING
   // ============================================================
   let cellSize = 36; // safe default until resize() runs
@@ -258,12 +439,16 @@
     const storeBannerH = (storeBanner && storeBanner.offsetHeight) || 0;
     const adBanner = document.getElementById("ad-banner-container");
     const adBannerH = (adBanner && !adBanner.classList.contains("hidden")) ? (adBanner.offsetHeight || 0) : 0;
+    const modeSelector = document.getElementById("mode-selector");
+    const modeSelectorH = (modeSelector && modeSelector.offsetHeight) || 0;
+    const dailyInfo = document.getElementById("daily-info");
+    const dailyInfoH = (dailyInfo && !dailyInfo.classList.contains("hidden")) ? (dailyInfo.offsetHeight || 0) : 0;
     const appPad = 16 + 8; // padding + gaps
     const trayMinH = 80;
     const vh = window.innerHeight || document.documentElement.clientHeight || 700;
     const vw = window.innerWidth || document.documentElement.clientWidth || 375;
 
-    const availH = vh - headerH - toolbarH - storeBannerH - adBannerH - appPad - trayMinH - 20;
+    const availH = vh - headerH - toolbarH - storeBannerH - adBannerH - modeSelectorH - dailyInfoH - appPad - trayMinH - 20;
     const availW = Math.min(vw - 44, 480 - 32); // account for wrapper padding
 
     boardPx = Math.min(availW, availH);
@@ -389,9 +574,27 @@
       sfxCombo(comboCount);
     }
 
-    // Haptic feedback
-    if (navigator.vibrate) {
-      navigator.vibrate(totalClears > 1 ? [30, 20, 30] : [20]);
+    // Enhanced celebrations based on clear size
+    if (totalClears >= 3) {
+      // Triple+ clear: confetti + gold flash
+      spawnConfetti(60);
+      screenFlash("gold");
+      if (navigator.vibrate) navigator.vibrate([40, 30, 40, 30, 60]);
+    } else if (totalClears >= 2) {
+      // Double clear: accent flash
+      screenFlash("accent");
+      if (navigator.vibrate) navigator.vibrate([30, 20, 30]);
+    } else {
+      // Single clear: gentle haptic
+      if (navigator.vibrate) navigator.vibrate([20]);
+    }
+
+    // Combo chain celebrations
+    if (comboCount >= 4) {
+      spawnConfetti(40);
+      screenFlash("gold");
+    } else if (comboCount >= 3) {
+      screenFlash("accent");
     }
 
     return pts;
@@ -569,14 +772,59 @@
   // PIECE GENERATION & RENDERING
   // ============================================================
   function randomPiece() {
-    const def = PIECE_DEFS[Math.floor(Math.random() * PIECE_DEFS.length)];
-    const colorIdx = Math.floor(Math.random() * CELL_COLORS.length) + 1;
+    const rng = (gameMode === "daily" && dailyRng) ? dailyRng : Math.random;
+    const def = PIECE_DEFS[Math.floor(rng() * PIECE_DEFS.length)];
+    const colorIdx = Math.floor(rng() * CELL_COLORS.length) + 1;
     return { cells: def, colorIdx };
   }
 
   function dealPieces() {
     pieces = [randomPiece(), randomPiece(), randomPiece()];
     renderPieces();
+  }
+
+  // ============================================================
+  // MODE SWITCHING
+  // ============================================================
+  function switchMode(mode) {
+    if (mode === gameMode && initialized) return;
+    gameMode = mode;
+
+    // Update UI
+    document.querySelectorAll(".mode-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.mode === mode);
+    });
+
+    const dailyInfo = document.getElementById("daily-info");
+    const atfTagline = document.getElementById("atf-tagline");
+
+    if (mode === "daily") {
+      const { seed, dateStr } = getDailySeed();
+      dailyRng = mulberry32(seed);
+      dailyDateStr = dateStr;
+
+      // Load daily best
+      dailyBestScore = parseInt(localStorage.getItem("blockdoku_daily_best_" + dateStr) || "0");
+      const dailyBestEl = document.getElementById("daily-best-val");
+      if (dailyBestEl) dailyBestEl.textContent = dailyBestScore;
+
+      // Format date nicely
+      const dateObj = new Date(dateStr + "T12:00:00");
+      const formatted = dateObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const dailyDateEl = document.getElementById("daily-date");
+      if (dailyDateEl) dailyDateEl.textContent = formatted;
+
+      dailyInfo.classList.remove("hidden");
+      if (atfTagline) atfTagline.style.display = "none";
+    } else {
+      dailyRng = null;
+      dailyInfo.classList.add("hidden");
+      if (atfTagline) atfTagline.style.display = "";
+    }
+
+    // Start fresh game in new mode
+    newGame();
+    localStorage.setItem("blockdoku_mode", mode);
   }
 
   function renderPieces() {
@@ -724,6 +972,16 @@
     const row = Math.round(by / cellSize - dragOffsetR);
 
     if (canPlace(dragPiece, row, col)) {
+      // Save undo snapshot BEFORE placing
+      undoSnapshot = {
+        board: board.map(r => [...r]),
+        score: score,
+        pieces: pieces.map(p => p ? { cells: p.cells, colorIdx: p.colorIdx } : null),
+        comboCount: comboCount,
+        gameStats: { ...gameStats },
+      };
+      btnUndo.disabled = false;
+
       placePiece(dragPiece, row, col);
       sfxPlace();
       gameStats.piecesPlaced++;
@@ -745,6 +1003,8 @@
 
       // Deal new pieces if all used
       if (pieces.every(p => p === null)) {
+        undoSnapshot = null; // Can't undo across a new deal
+        btnUndo.disabled = true;
         dealPieces();
       }
 
@@ -838,20 +1098,171 @@
   });
 
   // ============================================================
+  // UNDO
+  // ============================================================
+  function performUndo() {
+    if (!undoSnapshot || !gameActive) return;
+    board = undoSnapshot.board;
+    score = undoSnapshot.score;
+    pieces = undoSnapshot.pieces;
+    comboCount = undoSnapshot.comboCount;
+    gameStats = undoSnapshot.gameStats;
+
+    scoreEl.textContent = score;
+    undoSnapshot = null;
+    btnUndo.disabled = true;
+
+    sfxUndo();
+    drawBoard();
+    renderPieces();
+    hideComboBadge();
+    saveState();
+  }
+
+  // ============================================================
+  // LEVEL SYSTEM
+  // ============================================================
+  function loadLevel() {
+    try {
+      const saved = JSON.parse(localStorage.getItem("blockdoku_level") || "null");
+      if (saved) {
+        playerXP = saved.xp || 0;
+        playerLevel = saved.level || 1;
+      }
+    } catch {}
+    updateLevelUI();
+  }
+
+  function saveLevel() {
+    localStorage.setItem("blockdoku_level", JSON.stringify({ xp: playerXP, level: playerLevel }));
+  }
+
+  function addXP(pts) {
+    playerXP += pts;
+    const prevLevel = playerLevel;
+
+    // Recalculate level from XP
+    while (playerLevel < 99 && playerXP >= xpForLevel(playerLevel + 1)) {
+      playerLevel++;
+    }
+
+    if (playerLevel > prevLevel) {
+      showLevelUp(playerLevel);
+      sfxLevelUp();
+    }
+
+    updateLevelUI();
+    saveLevel();
+  }
+
+  function updateLevelUI() {
+    levelBadge.textContent = playerLevel;
+    const currentThreshold = xpForLevel(playerLevel);
+    const nextThreshold = xpForLevel(Math.min(playerLevel + 1, 99));
+    const range = nextThreshold - currentThreshold;
+    const progress = range > 0 ? ((playerXP - currentThreshold) / range) * 100 : 100;
+    xpBarFill.style.width = Math.min(Math.max(progress, 0), 100) + "%";
+  }
+
+  function showLevelUp(level) {
+    levelUpNum.textContent = level;
+    levelUpOverlay.classList.remove("hidden");
+
+    // Spawn celebratory particles at center of board
+    const cx = boardPx / 2;
+    const cy = boardPx / 2;
+    for (let i = 0; i < 30; i++) {
+      const angle = (Math.PI * 2 * i) / 30;
+      const speed = 2 + Math.random() * 4;
+      const color = CELL_COLORS[i % CELL_COLORS.length];
+      particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        decay: 0.01 + Math.random() * 0.015,
+        size: 3 + Math.random() * 4,
+        color,
+      });
+    }
+    ensureAnimRunning();
+
+    setTimeout(() => {
+      levelUpOverlay.classList.add("hidden");
+    }, 1500);
+  }
+
+  // ============================================================
+  // SHARE SCORE
+  // ============================================================
+  function shareScore() {
+    const levelText = playerLevel > 1 ? ` (Level ${playerLevel})` : "";
+    const modeText = gameMode === "daily" ? ` on today's Daily Challenge` : "";
+    const text = `I scored ${score} in BlockDoku${modeText}${levelText}! Can you beat me? Play free: https://blockdoku-web.vercel.app`;
+
+    if (navigator.share) {
+      navigator.share({ text }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(text).then(() => {
+        showShareToast();
+      }).catch(() => {
+        // Fallback for older browsers
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        showShareToast();
+      });
+    }
+  }
+
+  function showShareToast() {
+    shareToast.classList.remove("hidden");
+    // Force re-trigger animation
+    shareToast.style.animation = "none";
+    void shareToast.offsetWidth;
+    shareToast.style.animation = "";
+    setTimeout(() => shareToast.classList.add("hidden"), 2000);
+  }
+
+  // ============================================================
   // SCORING & UI
   // ============================================================
   function addScore(pts) {
     score += pts;
-    scoreEl.textContent = score;
-    scoreEl.classList.remove("score-pop");
-    void scoreEl.offsetWidth;
-    scoreEl.classList.add("score-pop");
+    animateScoreTo(score);
+
+    // Pop animation for big gains
+    if (pts >= 15) {
+      scoreEl.classList.remove("score-slam");
+      void scoreEl.offsetWidth;
+      scoreEl.classList.add("score-slam");
+    } else {
+      scoreEl.classList.remove("score-pop");
+      void scoreEl.offsetWidth;
+      scoreEl.classList.add("score-pop");
+    }
 
     if (score > bestScore) {
       bestScore = score;
       bestEl.textContent = bestScore;
       localStorage.setItem("blockdoku_best", bestScore);
     }
+
+    // Update daily best
+    if (gameMode === "daily" && score > dailyBestScore) {
+      dailyBestScore = score;
+      const dailyBestEl = document.getElementById("daily-best-val");
+      if (dailyBestEl) dailyBestEl.textContent = dailyBestScore;
+      localStorage.setItem("blockdoku_daily_best_" + dailyDateStr, dailyBestScore);
+    }
+
+    // Award XP
+    addXP(pts);
   }
 
   function showFloatScore(pts, x, y, big) {
@@ -891,6 +1302,8 @@
     goCombos.textContent = gameStats.combos;
     goPieces.textContent = gameStats.piecesPlaced;
 
+    goLevelVal.textContent = playerLevel;
+
     if (isNewBest) {
       newBestBanner.classList.remove("hidden");
     } else {
@@ -926,16 +1339,26 @@
   function newGame() {
     goOverlay.classList.add("hidden");
     score = 0;
+    displayScore = 0;
     comboCount = 0;
     gameActive = true;
     bestScoreAtGameStart = bestScore; // snapshot before game begins
     gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
+    undoSnapshot = null;
+    btnUndo.disabled = true;
     scoreEl.textContent = "0";
     hideComboBadge();
+
+    // Reset daily RNG for consistent puzzle
+    if (gameMode === "daily") {
+      const { seed } = getDailySeed();
+      dailyRng = mulberry32(seed);
+    }
+
     initBoard();
     dealPieces();
     drawBoard();
-    saveState();
+    if (gameMode === "classic") saveState();
   }
 
   // ============================================================
@@ -1013,6 +1436,7 @@
         gameStats = s.gameStats || { linesCleared: 0, combos: 0, piecesPlaced: 0 };
         comboCount = s.comboCount || 0;
         scoreEl.textContent = score;
+        displayScore = score;
         drawBoard();
         renderPieces();
         if (!anyMovePossible()) {
@@ -1025,9 +1449,9 @@
     return false;
   }
 
-  // Auto-save
+  // Auto-save (classic mode only)
   setInterval(() => {
-    if (score > 0 && gameActive) saveState();
+    if (score > 0 && gameActive && gameMode === "classic") saveState();
   }, 5000);
 
   // ============================================================
@@ -1060,6 +1484,8 @@
   btnHelp.addEventListener("click", () => helpOverlay.classList.remove("hidden"));
   btnTheme.addEventListener("click", () => setTheme(!darkMode));
   btnSound.addEventListener("click", toggleSound);
+  btnUndo.addEventListener("click", performUndo);
+  shareBtn.addEventListener("click", shareScore);
   btnNewgame.addEventListener("click", () => {
     if (score > 0 && gameActive) {
       newgameOverlay.classList.remove("hidden");
@@ -1095,6 +1521,10 @@
     });
   });
 
+  // Mode selector
+  document.getElementById("mode-classic").addEventListener("click", () => switchMode("classic"));
+  document.getElementById("mode-daily").addEventListener("click", () => switchMode("daily"));
+
   // ============================================================
   // INIT
   // ============================================================
@@ -1121,10 +1551,21 @@
     localStorage.setItem("blockdoku_played", "1");
   }
 
-  // Load saved game or deal fresh pieces, then ensure layout is correct
-  if (!loadState()) {
-    dealPieces();
+  // Load level data
+  loadLevel();
+
+  // Restore mode preference
+  const savedMode = localStorage.getItem("blockdoku_mode");
+  if (savedMode === "daily") {
+    switchMode("daily");
+  } else {
+    // Classic mode: load saved game or deal fresh pieces
+    if (!loadState()) {
+      dealPieces();
+    }
+    displayScore = score; // sync animated counter
   }
+
   // Second resize to pick up any layout shifts from theme/loadState
   resize();
   initialized = true;

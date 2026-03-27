@@ -150,6 +150,120 @@ h1 {
   margin-top: -2px;
 }
 
+/* --- Mode Selector --- */
+#mode-selector {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  padding: 3px;
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 7px 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.mode-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+.daily-badge {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  display: none;
+}
+
+.daily-badge.has-streak { display: inline-block; }
+
+/* --- Daily Info Bar --- */
+#daily-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 4px 12px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#daily-info.hidden { display: none !important; }
+
+#daily-best-val {
+  color: var(--gold);
+  font-weight: 800;
+}
+
+/* --- Confetti Canvas --- */
+#confetti-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 500;
+}
+
+/* --- Screen Flash --- */
+@keyframes screenFlash {
+  0% { opacity: 0.35; }
+  100% { opacity: 0; }
+}
+
+.screen-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 400;
+  animation: screenFlash 0.4s ease-out forwards;
+}
+
+.screen-flash.gold { background: rgba(255, 181, 71, 0.3); }
+.screen-flash.accent { background: rgba(108, 140, 255, 0.2); }
+
+/* --- Animated Score Counter --- */
+@keyframes scoreSlam {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.5); }
+  60% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+.score-slam {
+  animation: scoreSlam 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 /* Above-the-fold tagline for SEO */
 #atf-tagline {
   width: 100%;
@@ -840,6 +954,142 @@ h1 {
 /* --- Responsive: hide store banner on very short screens --- */
 @media (max-height: 580px) {
   #store-banner { display: none; }
+}
+
+/* --- Undo Button (disabled state) --- */
+#btn-undo:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* --- Level Badge & XP Bar --- */
+.level-box {
+  position: relative;
+  border-color: rgba(108, 140, 255, 0.2) !important;
+  min-width: 56px !important;
+  padding-bottom: 8px !important;
+}
+
+.level-box .score-value {
+  color: var(--accent);
+  font-size: 1.1rem;
+}
+
+#xp-bar-wrapper {
+  position: absolute;
+  bottom: 3px;
+  left: 6px;
+  right: 6px;
+  height: 3px;
+  background: var(--surface);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#xp-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), #a78bfa);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* --- Level Up Overlay --- */
+#level-up-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 250;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.3);
+  animation: levelUpFade 1.5s ease forwards;
+}
+
+#level-up-overlay.hidden { display: none !important; }
+
+#level-up-text {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  animation: levelUpBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+#level-up-num {
+  font-size: 3rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent), #a78bfa, var(--gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: levelUpBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+}
+
+@keyframes levelUpFade {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes levelUpBounce {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* --- Share Toast --- */
+#share-toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--success);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 8px 20px;
+  border-radius: 20px;
+  z-index: 300;
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 1.5s forwards;
+  pointer-events: none;
+}
+
+#share-toast.hidden { display: none !important; }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* --- Game Over Buttons --- */
+#go-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#go-level {
+  text-align: center;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+#go-level .go-stat-val {
+  color: var(--accent);
+  font-weight: 800;
+  margin-left: 6px;
 }
 
 .hidden { display: none !important; }
