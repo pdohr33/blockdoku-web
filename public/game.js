@@ -196,8 +196,9 @@
   }
 
   function sfxPlace() {
-    playTone(600, 0.07, "sine", 0.05);
-    playTone(900, 0.05, "sine", 0.03);
+    playTone(600, 0.08, "sine", 0.05);
+    playTone(900, 0.06, "sine", 0.03);
+    playTone(1200, 0.04, "sine", 0.02); // extra sparkle
   }
 
   function sfxClear(count) {
@@ -239,32 +240,59 @@
   // ============================================================
   let particles = [];
 
-  function spawnParticles(x, y, color, count = 8) {
+  function spawnParticles(x, y, color, count = 8, opts = {}) {
+    const { speedMult = 1, sizeMult = 1, gravity = true, sparkle = false } = opts;
     for (let i = 0; i < count; i++) {
       const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
-      const speed = 1.5 + Math.random() * 3;
+      const speed = (1.5 + Math.random() * 3) * speedMult;
       particles.push({
         x, y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 1,
         decay: 0.015 + Math.random() * 0.02,
-        size: 2 + Math.random() * 3,
+        size: (2 + Math.random() * 3) * sizeMult,
         color,
+        noGravity: !gravity,
+        sparkle,
+      });
+    }
+    ensureAnimRunning();
+  }
+
+  // Drag trail particles
+  function spawnDragTrail(x, y, color) {
+    for (let i = 0; i < 2; i++) {
+      particles.push({
+        x: x + (Math.random() - 0.5) * 8,
+        y: y + (Math.random() - 0.5) * 8,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: (Math.random() - 0.5) * 1.5,
+        life: 0.8,
+        decay: 0.03 + Math.random() * 0.02,
+        size: 2 + Math.random() * 2.5,
+        color,
+        noGravity: true,
+        sparkle: true,
       });
     }
     ensureAnimRunning();
   }
 
   function spawnClearParticles(cellIndices) {
+    const intensity = cellIndices.length > 18 ? 2 : cellIndices.length > 9 ? 1.5 : 1;
     for (const idx of cellIndices) {
       const r = Math.floor(idx / GRID);
       const c = idx % GRID;
       const x = c * cellSize + cellSize / 2;
       const y = r * cellSize + cellSize / 2;
       const colorIdx = board[r][c];
-      const color = colorIdx > 0 ? CELL_COLORS[(colorIdx - 1) % CELL_COLORS.length] : "#6c8cff";
-      spawnParticles(x, y, color, 5);
+      const ci = colorIdx > 0 ? (colorIdx - 1) % CELL_COLORS.length : 0;
+      const color = CELL_COLORS[ci];
+      const lightColor = CELL_COLORS_LIGHT[ci];
+      spawnParticles(x, y, color, Math.round(5 * intensity), { speedMult: intensity, sizeMult: intensity * 0.8 });
+      // Add sparkle particles for extra juice
+      spawnParticles(x, y, lightColor, 2, { speedMult: 0.5, sizeMult: 0.6, sparkle: true, gravity: false });
     }
   }
 
@@ -273,7 +301,8 @@
       const p = particles[i];
       p.x += p.vx;
       p.y += p.vy;
-      p.vy += 0.05; // gravity
+      if (!p.noGravity) p.vy += 0.05; // gravity
+      p.vx *= 0.99; // air resistance
       p.life -= p.decay;
       if (p.life <= 0) particles.splice(i, 1);
     }
@@ -284,11 +313,27 @@
     for (const p of particles) {
       fxCtx.globalAlpha = p.life;
       fxCtx.fillStyle = p.color;
-      fxCtx.beginPath();
-      fxCtx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-      fxCtx.fill();
+
+      if (p.sparkle) {
+        // Diamond sparkle shape
+        const s = p.size * p.life;
+        fxCtx.save();
+        fxCtx.translate(p.x, p.y);
+        fxCtx.rotate(Math.PI / 4);
+        fxCtx.fillRect(-s / 2, -s / 2, s, s);
+        // Glow
+        fxCtx.shadowColor = p.color;
+        fxCtx.shadowBlur = s * 2;
+        fxCtx.fillRect(-s / 2, -s / 2, s, s);
+        fxCtx.restore();
+      } else {
+        fxCtx.beginPath();
+        fxCtx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        fxCtx.fill();
+      }
     }
     fxCtx.globalAlpha = 1;
+    fxCtx.shadowBlur = 0;
   }
 
   // Animation loop for particles - only runs when particles exist (battery friendly)
@@ -601,6 +646,7 @@
       pts = Math.floor(pts * (1 + comboCount * 0.5));
       showComboBadge(comboCount);
       sfxCombo(comboCount);
+      showStreakBanner(comboCount);
     }
 
     // Perfect clear bonus: board is completely empty
@@ -640,19 +686,56 @@
   }
 
   function animateClearStaggered(cells) {
-    // Flash and board glow
     const wrapper = document.getElementById("board-wrapper");
-    wrapper.classList.remove("board-glow");
-    void wrapper.offsetWidth;
-    wrapper.classList.add("board-glow");
+    const app = document.getElementById("app");
 
-    if (cells.length > 12) {
-      // Big clear: screen shake
-      const app = document.getElementById("app");
-      app.classList.remove("shake");
-      void app.offsetWidth;
+    // Escalating glow based on clear size
+    const glowClasses = ["board-glow", "board-glow-intense", "board-glow-epic"];
+    for (const cls of glowClasses) wrapper.classList.remove(cls);
+    void wrapper.offsetWidth;
+
+    if (cells.length >= 27) {
+      wrapper.classList.add("board-glow-epic");
+    } else if (cells.length >= 18) {
+      wrapper.classList.add("board-glow-intense");
+    } else {
+      wrapper.classList.add("board-glow");
+    }
+
+    // Escalating shake
+    const shakeClasses = ["shake", "shake-big", "shake-epic"];
+    for (const cls of shakeClasses) app.classList.remove(cls);
+    void app.offsetWidth;
+
+    if (cells.length >= 27) {
+      app.classList.add("shake-epic");
+    } else if (cells.length >= 18) {
+      app.classList.add("shake-big");
+    } else if (cells.length > 12) {
       app.classList.add("shake");
     }
+  }
+
+  // Streak banner system
+  function showStreakBanner(combo) {
+    if (combo < 2) return;
+    const level = Math.min(combo, 5);
+
+    const existing = document.querySelector(".streak-banner");
+    if (existing) existing.remove();
+
+    const labels = {
+      2: "DOUBLE!",
+      3: "TRIPLE!",
+      4: "UNSTOPPABLE!",
+      5: "GODLIKE!",
+    };
+
+    const el = document.createElement("div");
+    el.className = `streak-banner streak-${level}`;
+    el.innerHTML = `<span class="streak-text">${labels[level] || "x" + combo + " COMBO!"}</span>`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1600);
   }
 
   function anyMovePossible() {
@@ -747,9 +830,18 @@
     };
     btnUndo.disabled = false;
 
+    triggerPlacementPop(piece, placement.row, placement.col);
     placePiece(piece, placement.row, placement.col);
     sfxPlace();
     gameStats.piecesPlaced++;
+
+    // Spawn placement sparkles
+    for (const [dr, dc] of piece.cells) {
+      const px = (placement.col + dc) * cellSize + cellSize / 2;
+      const py = (placement.row + dr) * cellSize + cellSize / 2;
+      const ci = (piece.colorIdx - 1) % CELL_COLORS.length;
+      spawnParticles(px, py, CELL_COLORS_LIGHT[ci], 3, { speedMult: 0.6, sizeMult: 0.7, sparkle: true });
+    }
 
     // Score for placing (mirrors drag path)
     const placePts = piece.cells.length;
@@ -802,8 +894,52 @@
     cachedStyles.hoverInvalid = style.getPropertyValue("--cell-hover-invalid").trim();
   }
 
+  // Ambient shimmer state
+  let shimmerPhase = 0;
+  let shimmerAnimId = null;
+  let lastShimmerTime = 0;
+
+  // Placement pop state
+  let placedCells = []; // [{r, c, time, color}]
+
+  function startAmbientShimmer() {
+    if (shimmerAnimId) return;
+    lastShimmerTime = performance.now();
+    function shimmerLoop(now) {
+      const dt = (now - lastShimmerTime) / 1000;
+      lastShimmerTime = now;
+      shimmerPhase += dt * 0.8; // slow wave
+      if (shimmerPhase > Math.PI * 200) shimmerPhase -= Math.PI * 200;
+      drawBoard();
+      shimmerAnimId = requestAnimationFrame(shimmerLoop);
+    }
+    shimmerAnimId = requestAnimationFrame(shimmerLoop);
+  }
+
+  function stopAmbientShimmer() {
+    if (shimmerAnimId) {
+      cancelAnimationFrame(shimmerAnimId);
+      shimmerAnimId = null;
+    }
+  }
+
+  function triggerPlacementPop(piece, row, col) {
+    const now = performance.now();
+    const ci = (piece.colorIdx - 1) % CELL_COLORS.length;
+    const color = CELL_COLORS[ci];
+    for (let i = 0; i < piece.cells.length; i++) {
+      const [dr, dc] = piece.cells[i];
+      placedCells.push({ r: row + dr, c: col + dc, time: now + i * 30, color });
+    }
+    // Clean up old entries after animation
+    setTimeout(() => {
+      placedCells = placedCells.filter(p => performance.now() - p.time < 350);
+    }, 500);
+  }
+
   function drawBoard() {
     const { gridBg, gridLine, cellEmpty } = cachedStyles;
+    const now = performance.now();
 
     // IMPORTANT: fully clear the canvas first to remove any ghost artifacts
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -827,16 +963,45 @@
         if (board[r][c] !== 0) {
           const ci = (board[r][c] - 1) % CELL_COLORS.length;
           const color = CELL_COLORS[ci];
+          const lightColor = CELL_COLORS_LIGHT[ci];
+
+          // Check if this cell just got placed (pop animation)
+          const popEntry = placedCells.find(p => p.r === r && p.c === c);
+          let scale = 1;
+          if (popEntry) {
+            const elapsed = now - popEntry.time;
+            if (elapsed >= 0 && elapsed < 300) {
+              const t = elapsed / 300;
+              // Elastic pop: 0 -> 1.2 -> 0.9 -> 1
+              if (t < 0.4) scale = t / 0.4 * 1.2;
+              else if (t < 0.7) scale = 1.2 - (t - 0.4) / 0.3 * 0.3;
+              else scale = 0.9 + (t - 0.7) / 0.3 * 0.1;
+            }
+          }
+
+          ctx.save();
+          if (scale !== 1) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.translate(cx, cy);
+            ctx.scale(scale, scale);
+            ctx.translate(-cx, -cy);
+          }
+
+          // Subtle glow behind filled cells
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 6;
 
           // Main fill
           ctx.fillStyle = color;
           ctx.beginPath();
           roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2, radius);
           ctx.fill();
+          ctx.shadowBlur = 0;
 
           // Top shine (gradient)
           const shineGrad = ctx.createLinearGradient(x, y + pad, x, y + cellSize * 0.5);
-          shineGrad.addColorStop(0, "rgba(255,255,255,0.2)");
+          shineGrad.addColorStop(0, "rgba(255,255,255,0.25)");
           shineGrad.addColorStop(1, "rgba(255,255,255,0)");
           ctx.fillStyle = shineGrad;
           ctx.beginPath();
@@ -848,11 +1013,17 @@
           ctx.beginPath();
           roundRect(ctx, x + pad, y + cellSize * 0.7, cellSize - pad * 2, cellSize * 0.3 - pad, radius);
           ctx.fill();
+
+          ctx.restore();
         } else {
+          // Ambient shimmer on empty cells
+          const shimmer = Math.sin(shimmerPhase + r * 0.7 + c * 0.5) * 0.03 + 0.03;
           ctx.fillStyle = cellEmpty;
+          ctx.globalAlpha = 1 + shimmer;
           ctx.beginPath();
           roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2, radius);
           ctx.fill();
+          ctx.globalAlpha = 1;
         }
       }
     }
@@ -872,28 +1043,38 @@
   function drawGhost(piece, row, col, valid) {
     drawBoard(); // clears canvas and redraws board
 
+    const pulse = Math.sin(performance.now() * 0.005) * 0.1 + 0.5; // 0.4 - 0.6 pulsing alpha
+
     // Save and restore context state to prevent alpha/style leaks
     ctx.save();
     try {
       if (valid) {
         const ci = (piece.colorIdx - 1) % CELL_COLORS.length;
         const color = CELL_COLORS[ci];
+        const lightColor = CELL_COLORS_LIGHT[ci];
+
         for (const [dr, dc] of piece.cells) {
           const r = row + dr, c = col + dc;
           if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
           const x = c * cellSize, y = r * cellSize;
 
-          // Ghost fill
+          // Glow behind ghost
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 12;
+
+          // Ghost fill with pulse
           ctx.fillStyle = color;
-          ctx.globalAlpha = 0.45;
+          ctx.globalAlpha = pulse;
           ctx.beginPath();
           roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
           ctx.fill();
 
-          // Ghost border
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 1.5;
-          ctx.globalAlpha = 0.6;
+          ctx.shadowBlur = 0;
+
+          // Bright border
+          ctx.strokeStyle = lightColor;
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = pulse + 0.15;
           ctx.beginPath();
           roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
           ctx.stroke();
@@ -905,6 +1086,7 @@
           if (r < 0 || r >= GRID || c < 0 || c >= GRID) continue;
           const x = c * cellSize, y = r * cellSize;
           ctx.fillStyle = hoverColor;
+          ctx.globalAlpha = 0.5;
           ctx.beginPath();
           roundRect(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4);
           ctx.fill();
@@ -1151,6 +1333,17 @@
     ghostEl.style.left = (clientX - ghostEl.offsetWidth / 2) + "px";
     ghostEl.style.top = (clientY - ghostEl.offsetHeight - dragLift) + "px";
 
+    // Spawn drag trail particles on the board
+    if (dragMoved && dragPiece) {
+      const rect = canvas.getBoundingClientRect();
+      const bx = clientX - rect.left;
+      const by = clientY - rect.top - dragLift;
+      if (bx > 0 && bx < boardPx && by > 0 && by < boardPx) {
+        const ci = (dragPiece.colorIdx - 1) % CELL_COLORS.length;
+        spawnDragTrail(bx, by, CELL_COLORS_LIGHT[ci]);
+      }
+    }
+
     const rect = canvas.getBoundingClientRect();
     const bx = clientX - rect.left;
     const by = clientY - rect.top - dragLift;
@@ -1210,9 +1403,18 @@
       };
       btnUndo.disabled = false;
 
+      triggerPlacementPop(dragPiece, row, col);
       placePiece(dragPiece, row, col);
       sfxPlace();
       gameStats.piecesPlaced++;
+
+      // Spawn placement sparkles
+      for (const [dr, dc] of dragPiece.cells) {
+        const px = (col + dc) * cellSize + cellSize / 2;
+        const py = (row + dr) * cellSize + cellSize / 2;
+        const ci = (dragPiece.colorIdx - 1) % CELL_COLORS.length;
+        spawnParticles(px, py, CELL_COLORS_LIGHT[ci], 3, { speedMult: 0.6, sizeMult: 0.7, sparkle: true });
+      }
 
       // Score for placing
       const placePts = dragPiece.cells.length;
@@ -1514,7 +1716,12 @@
 
   function showComboBadge(count) {
     comboText.textContent = "x" + count;
-    comboBadge.classList.remove("hidden");
+    comboBadge.classList.remove("hidden", "combo-fire", "combo-inferno");
+    if (count >= 5) {
+      comboBadge.classList.add("combo-inferno");
+    } else if (count >= 3) {
+      comboBadge.classList.add("combo-fire");
+    }
     comboBadge.style.animation = "none";
     void comboBadge.offsetWidth;
     comboBadge.style.animation = "";
@@ -1522,6 +1729,7 @@
 
   function hideComboBadge() {
     comboBadge.classList.add("hidden");
+    comboBadge.classList.remove("combo-fire", "combo-inferno");
   }
 
   // ============================================================
@@ -1529,6 +1737,28 @@
   // ============================================================
   function gameOver() {
     sfxGameOver();
+    stopAmbientShimmer();
+
+    // Board shatter effect: explode all remaining cells outward
+    for (let r = 0; r < GRID; r++) {
+      for (let c = 0; c < GRID; c++) {
+        if (board[r][c] !== 0) {
+          const ci = (board[r][c] - 1) % CELL_COLORS.length;
+          const x = c * cellSize + cellSize / 2;
+          const y = r * cellSize + cellSize / 2;
+          spawnParticles(x, y, CELL_COLORS[ci], 3, { speedMult: 1.5, sizeMult: 1.2 });
+        }
+      }
+    }
+
+    // Screen shake on game over
+    const app = document.getElementById("app");
+    app.classList.remove("shake-big");
+    void app.offsetWidth;
+    app.classList.add("shake-big");
+
+    screenFlash("combo");
+
     // Compare against the best score from BEFORE this game started,
     // not the one addScore() already updated mid-game
     const isNewBest = score > bestScoreAtGameStart && score > 0;
@@ -1544,6 +1774,10 @@
 
     if (isNewBest) {
       newBestBanner.classList.remove("hidden");
+      // Fireworks for new best!
+      spawnConfetti(150);
+      screenFlash("epic");
+      if (navigator.vibrate) navigator.vibrate([80, 50, 80, 50, 80, 50, 120]);
     } else {
       newBestBanner.classList.add("hidden");
     }
@@ -1599,6 +1833,7 @@
     initBoard();
     dealPieces();
     drawBoard();
+    startAmbientShimmer();
     if (gameMode === "classic") saveState();
   }
 
@@ -1825,5 +2060,6 @@
   }
 
   // Particle animation loop starts on-demand via ensureAnimRunning()
-  // No need to run at startup when there are no particles
+  // Start ambient shimmer for that alive board feel
+  startAmbientShimmer();
 })();
