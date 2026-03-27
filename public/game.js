@@ -1132,7 +1132,7 @@
       lastShimmerTime = now;
       shimmerPhase += dt * 0.8; // slow wave
       if (shimmerPhase > Math.PI * 200) shimmerPhase -= Math.PI * 200;
-      drawBoard();
+      if (!isGhostPreviewActive()) renderBoardFrame();
       shimmerAnimId = requestAnimationFrame(shimmerLoop);
     }
     shimmerAnimId = requestAnimationFrame(shimmerLoop);
@@ -1143,6 +1143,12 @@
       cancelAnimationFrame(shimmerAnimId);
       shimmerAnimId = null;
     }
+  }
+
+  function isGhostPreviewActive() {
+    return !!dragPiece &&
+      lastGhostRow >= -2 && lastGhostRow < GRID + 2 &&
+      lastGhostCol >= -2 && lastGhostCol < GRID + 2;
   }
 
   function triggerPlacementPop(piece, row, col) {
@@ -1292,8 +1298,7 @@
     }
   }
 
-  function drawGhost(piece, row, col, valid) {
-    drawBoard(); // clears canvas and redraws board
+  function drawGhostOverlay(piece, row, col, valid) {
 
     const now = performance.now();
     const pulse = Math.sin(now * 0.006) * 0.12 + 0.72; // 0.60 - 0.84 — much more visible
@@ -1420,6 +1425,19 @@
     } finally {
       ctx.restore();
     }
+  }
+
+  function drawGhost(piece, row, col, valid) {
+    drawBoard();
+    drawGhostOverlay(piece, row, col, valid);
+  }
+
+  function renderBoardFrame() {
+    if (isGhostPreviewActive()) {
+      drawGhost(dragPiece, lastGhostRow, lastGhostCol, canPlace(dragPiece, lastGhostRow, lastGhostCol));
+      return;
+    }
+    drawBoard();
   }
 
   function roundRect(ctx, x, y, w, h, r) {
@@ -1613,8 +1631,7 @@
     if (ghostAnimId) return;
     function tick() {
       if (!dragPiece || lastGhostRow === -999) { ghostAnimId = null; return; }
-      const valid = canPlace(dragPiece, lastGhostRow, lastGhostCol);
-      drawGhost(dragPiece, lastGhostRow, lastGhostCol, valid);
+      renderBoardFrame();
       ghostAnimId = requestAnimationFrame(tick);
     }
     ghostAnimId = requestAnimationFrame(tick);
@@ -1698,9 +1715,10 @@
       lastGhostCol = col;
       if (row >= -2 && row < GRID + 2 && col >= -2 && col < GRID + 2) {
         startGhostAnim();
+        renderBoardFrame();
       } else {
         stopGhostAnim();
-        drawBoard();
+        renderBoardFrame();
       }
     }
   }
