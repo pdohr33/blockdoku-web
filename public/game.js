@@ -760,17 +760,23 @@
     if (clearPts > 0) {
       sfxClear(Math.ceil(clearPts / 9));
       addScore(clearPts);
+      // Float score near the placement
+      const boardRect = canvas.getBoundingClientRect();
+      const cx = boardRect.left + (placement.col + 0.5) * cellSize;
+      const cy = boardRect.top + (placement.row + 0.5) * cellSize;
+      showFloatScore(clearPts, cx, cy - 40, clearPts > 20);
     }
 
     pieces[idx] = null;
-    renderPieces();
 
-    // Deal new pieces if all used
-    if (pieces.every(p => p === null)) {
+    const dealtFreshRack = pieces.every(p => p === null);
+    if (dealtFreshRack) {
       undoSnapshot = null; // Can't undo across a new deal
       btnUndo.disabled = true;
       dealPieces();
     }
+
+    renderPieces(dealtFreshRack);
 
     // Check game over
     if (!anyMovePossible()) {
