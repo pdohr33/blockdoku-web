@@ -361,7 +361,9 @@ h1 {
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.score-box:has(.score-slam) {
+.score-box.score-active,
+.score-box:has(.score-slam),
+.score-box:has(.score-pop) {
   border-color: var(--accent);
   box-shadow: 0 0 16px var(--accent-glow);
 }
@@ -1102,6 +1104,33 @@ h1 {
 @media (min-width: 600px) {
   #board-wrapper {
     padding: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .shake,
+  .shake-big,
+  .shake-epic,
+  .drag-ghost,
+  .float-score,
+  .float-score.big,
+  .streak-banner,
+  .perfect-clear-banner,
+  .screen-flash,
+  #level-up-overlay,
+  #new-best-banner,
+  .btn-primary,
+  h1 {
+    animation: none !important;
   }
 }
 

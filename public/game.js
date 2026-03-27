@@ -132,6 +132,7 @@
   const fxCtx = fxCanvas.getContext("2d");
   const tray = document.getElementById("pieces-tray");
   const scoreEl = document.getElementById("score");
+  const scoreBoxEl = scoreEl.closest(".score-box");
   const bestEl = document.getElementById("best-score");
   const comboBadge = document.getElementById("combo-badge");
   const comboText = document.getElementById("combo-text");
@@ -169,6 +170,7 @@
   // Share
   const shareBtn = document.getElementById("share-score-btn");
   const shareToast = document.getElementById("share-toast");
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   // ============================================================
   // AUDIO SYSTEM
@@ -452,6 +454,7 @@
 
   // Screen flash effect
   function screenFlash(type) {
+    if (prefersReducedMotion.matches) return;
     const el = document.createElement("div");
     el.className = "screen-flash " + type;
     document.body.appendChild(el);
@@ -903,9 +906,13 @@
   let placedCells = []; // [{r, c, time, color}]
 
   function startAmbientShimmer() {
-    if (shimmerAnimId) return;
+    if (shimmerAnimId || prefersReducedMotion.matches || document.hidden) return;
     lastShimmerTime = performance.now();
     function shimmerLoop(now) {
+      if (prefersReducedMotion.matches || document.hidden) {
+        shimmerAnimId = null;
+        return;
+      }
       const dt = (now - lastShimmerTime) / 1000;
       lastShimmerTime = now;
       shimmerPhase += dt * 0.8; // slow wave
@@ -1525,6 +1532,11 @@
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && dragPiece) cancelDrag();
+    if (document.hidden) {
+      stopAmbientShimmer();
+    } else if (gameActive) {
+      startAmbientShimmer();
+    }
   });
 
   // ============================================================
@@ -1633,11 +1645,11 @@
 
     if (navigator.share) {
       navigator.share({ text }).catch(() => {});
-    } else {
+    } else if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(() => {
         showShareToast();
       }).catch(() => {
-        // Fallback for older browsers
+        // Fallback for browsers that expose clipboard but reject the write
         const ta = document.createElement("textarea");
         ta.value = text;
         ta.style.position = "fixed";
@@ -1648,6 +1660,17 @@
         ta.remove();
         showShareToast();
       });
+    } else {
+      // Fallback for older browsers / insecure contexts
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      showShareToast();
     }
   }
 
@@ -1676,6 +1699,12 @@
       scoreEl.classList.remove("score-pop");
       void scoreEl.offsetWidth;
       scoreEl.classList.add("score-pop");
+    }
+    if (scoreBoxEl) {
+      scoreBoxEl.classList.remove("score-active");
+      void scoreBoxEl.offsetWidth;
+      scoreBoxEl.classList.add("score-active");
+      setTimeout(() => scoreBoxEl.classList.remove("score-active"), 500);
     }
 
     if (score > bestScore) {
@@ -2062,4 +2091,12 @@
   // Particle animation loop starts on-demand via ensureAnimRunning()
   // Start ambient shimmer for that alive board feel
   startAmbientShimmer();
+  prefersReducedMotion.addEventListener("change", () => {
+    if (prefersReducedMotion.matches) {
+      stopAmbientShimmer();
+      drawBoard();
+    } else if (gameActive && !document.hidden) {
+      startAmbientShimmer();
+    }
+  });
 })();
