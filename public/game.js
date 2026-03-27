@@ -212,6 +212,9 @@
     playTone(600, 0.08, "sine", 0.05);
     playTone(900, 0.06, "sine", 0.03);
     playTone(1200, 0.04, "sine", 0.02);
+    // Satisfying bass thump for tactile feedback
+    playTone(120, 0.08, "sine", 0.04);
+    playTone(80, 0.06, "triangle", 0.025);
   }
 
   // Musical clear: major chord with harmonic richness
@@ -1104,6 +1107,8 @@
   // Tap-to-place: click a highlighted hint cell to place the piece there
   canvas.addEventListener("click", (e) => {
     if (!hintedPiece || hintedPieceIdx < 0 || !gameActive) return;
+    lastInteractionTime = performance.now();
+    idleNudgeActive = false;
 
     const rect = canvas.getBoundingClientRect();
     const tapCol = Math.floor((e.clientX - rect.left) / cellSize);
@@ -1208,6 +1213,14 @@
   let shimmerAnimId = null;
   let lastShimmerTime = 0;
 
+  // Cell twinkle state — random filled cells briefly sparkle
+  let twinkleCells = []; // [{r, c, startTime}]
+  let lastTwinkleSpawn = 0;
+
+  // Idle nudge state — bounce first available piece after inactivity
+  let lastInteractionTime = 0;
+  let idleNudgeActive = false;
+
   // Placement pop state
   let placedCells = []; // [{r, c, time, color}]
 
@@ -1223,6 +1236,40 @@
       lastShimmerTime = now;
       shimmerPhase += dt * 0.8; // slow wave
       if (shimmerPhase > Math.PI * 200) shimmerPhase -= Math.PI * 200;
+
+      // Cell twinkle: spawn a new sparkle every ~800ms on a random filled cell
+      if (now - lastTwinkleSpawn > 800 && gameActive) {
+        const filledCells = [];
+        for (let r = 0; r < GRID; r++) {
+          for (let c = 0; c < GRID; c++) {
+            if (board[r][c] !== 0) filledCells.push({ r, c });
+          }
+        }
+        if (filledCells.length > 0) {
+          const pick = filledCells[Math.floor(Math.random() * filledCells.length)];
+          twinkleCells.push({ r: pick.r, c: pick.c, startTime: now });
+          lastTwinkleSpawn = now;
+        }
+      }
+      // Clean expired twinkles (500ms lifetime)
+      twinkleCells = twinkleCells.filter(t => now - t.startTime < 500);
+
+      // Idle nudge: if no interaction for 5s and game is active
+      if (gameActive && now - lastInteractionTime > 5000 && !idleNudgeActive && !dragPiece) {
+        idleNudgeActive = true;
+        const slots = tray.querySelectorAll(".piece-slot");
+        for (let i = 0; i < pieces.length; i++) {
+          if (pieces[i]) {
+            const slot = slots[i];
+            if (slot && !slot.classList.contains("used")) {
+              slot.classList.add("idle-nudge");
+              setTimeout(() => slot.classList.remove("idle-nudge"), 600);
+            }
+            break; // only nudge the first available
+          }
+        }
+      }
+
       if (!isGhostPreviewActive()) renderBoardFrame();
       shimmerAnimId = requestAnimationFrame(shimmerLoop);
     }
@@ -1345,6 +1392,26 @@
           ctx.globalAlpha = 1;
         }
       }
+    }
+
+    // Cell twinkle overlay — brief sparkle on random filled cells
+    for (const tw of twinkleCells) {
+      const elapsed = now - tw.startTime;
+      const progress = elapsed / 500;
+      if (progress >= 1) continue;
+      // Ease: bright peak at 30%, then fade
+      const alpha = progress < 0.3 ? progress / 0.3 : 1 - (progress - 0.3) / 0.7;
+      const x = tw.c * cellSize;
+      const y = tw.r * cellSize;
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.6;
+      ctx.fillStyle = "#fff";
+      ctx.shadowColor = "#fff";
+      ctx.shadowBlur = cellSize * 0.4;
+      ctx.beginPath();
+      roundRect(ctx, x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2, radius);
+      ctx.fill();
+      ctx.restore();
     }
 
     // 3x3 box outlines with traveling light
@@ -1737,6 +1804,8 @@
 
   function startDrag(idx, clientX, clientY) {
     if (!pieces[idx] || !gameActive) return;
+    lastInteractionTime = performance.now();
+    idleNudgeActive = false;
     clearHints();
     dragPiece = pieces[idx];
     dragIdx = idx;
@@ -2311,6 +2380,15 @@
     sfxGameOver();
     stopAmbientShimmer();
 
+    // Dramatic vignette — dark radial overlay that closes in during shatter
+    if (!prefersReducedMotion.matches) {
+      const vig = document.createElement("div");
+      vig.className = "game-over-vignette";
+      document.body.appendChild(vig);
+      // Auto-remove after animation completes
+      setTimeout(() => vig.remove(), 2000);
+    }
+
     // Board shatter effect: explode cells row-by-row with staggered delay
     const app = document.getElementById("app");
     for (let r = 0; r < GRID; r++) {
@@ -2359,7 +2437,10 @@
 
     if (isNewBest) {
       newBestBanner.classList.remove("hidden");
-      newBestBanner.innerHTML = '&#9733; NEW BEST SCORE! &#9733;';
+      newBestBanner.innerHTML = '&#128081; NEW BEST SCORE! &#128081;';
+      // Golden modal treatment for new best
+      const modal = goOverlay.querySelector(".game-over-modal");
+      if (modal) modal.classList.add("new-best-modal");
       // Fireworks for new best!
       spawnConfetti(150);
       screenFlash("epic");
@@ -2367,6 +2448,8 @@
       if (navigator.vibrate) navigator.vibrate([80, 50, 80, 50, 80, 50, 120]);
     } else {
       newBestBanner.classList.add("hidden");
+      const modal = goOverlay.querySelector(".game-over-modal");
+      if (modal) modal.classList.remove("new-best-modal");
     }
 
     // Try to show interstitial ad between games
@@ -2405,6 +2488,8 @@
     clearGameOverState();
     clearTransientFx();
     goOverlay.classList.add("hidden");
+    const goModal = goOverlay.querySelector(".game-over-modal");
+    if (goModal) goModal.classList.remove("new-best-modal");
     score = 0;
     displayScore = 0;
     comboCount = 0;
@@ -2413,6 +2498,9 @@
     gameStats = { linesCleared: 0, combos: 0, piecesPlaced: 0 };
     lastMilestone = 0;
     hasPassedBestThisGame = false;
+    twinkleCells = [];
+    lastInteractionTime = performance.now();
+    idleNudgeActive = false;
     if (gameOverFireworksId) {
       clearInterval(gameOverFireworksId);
       gameOverFireworksId = null;
@@ -2665,6 +2753,7 @@
 
   // Particle animation loop starts on-demand via ensureAnimRunning()
   // Start ambient shimmer for that alive board feel
+  lastInteractionTime = performance.now();
   startAmbientShimmer();
   prefersReducedMotion.addEventListener("change", () => {
     if (prefersReducedMotion.matches) {

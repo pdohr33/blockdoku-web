@@ -1864,4 +1864,103 @@ h1 {
   .score-box.score-is-best {
     box-shadow: none !important;
   }
+
+  .game-over-vignette {
+    display: none !important;
+  }
+
+  .piece-slot.idle-nudge {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   WAVE 5: Final polish — vignette, twinkle, nudge, new-best trophy
+   ============================================================ */
+
+/* --- Dramatic game-over vignette --- */
+@keyframes vignetteClose {
+  0% {
+    opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0) 100%);
+  }
+  40% {
+    opacity: 1;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.6) 100%);
+  }
+  100% {
+    opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 10%, rgba(0,0,0,0.8) 100%);
+  }
+}
+
+.game-over-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  pointer-events: none;
+  animation: vignetteClose 2s ease forwards;
+}
+
+/* --- Idle nudge bounce on first available piece --- */
+@keyframes idleNudge {
+  0%, 100% { transform: translateY(0); }
+  20% { transform: translateY(-6px); }
+  40% { transform: translateY(0); }
+  55% { transform: translateY(-3px); }
+  70% { transform: translateY(0); }
+}
+
+.piece-slot.idle-nudge {
+  animation: idleNudge 0.6s ease !important;
+  border-color: var(--accent-glow) !important;
+  box-shadow: 0 0 16px var(--accent-glow) !important;
+}
+
+/* --- New-best game-over modal golden treatment --- */
+.game-over-modal.new-best-modal {
+  border: 2px solid var(--gold) !important;
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(255, 181, 71, 0.3), 0 0 80px rgba(255, 181, 71, 0.1) !important;
+  background: linear-gradient(180deg, var(--surface-solid) 0%, var(--surface-solid) 85%, rgba(255, 181, 71, 0.06) 100%) !important;
+}
+
+.game-over-modal.new-best-modal h2 {
+  background: linear-gradient(135deg, var(--gold), #ff8547, #ff3b7a, #a855f7) !important;
+  background-size: 300% 300% !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+.game-over-modal.new-best-modal .go-score-num {
+  background: linear-gradient(135deg, var(--gold), #ff3b7a) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+/* --- Game-over score slam-in from sides --- */
+@keyframes goScoreSlamLeft {
+  0% { opacity: 0; transform: translateX(-40px) scale(0.7); }
+  50% { transform: translateX(5px) scale(1.08); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes goScoreSlamRight {
+  0% { opacity: 0; transform: translateX(40px) scale(0.7); }
+  50% { transform: translateX(-5px) scale(1.08); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.game-over-modal .go-score-item:first-child {
+  animation: goScoreSlamLeft 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
+}
+
+.game-over-modal .go-score-item:last-child {
+  animation: goScoreSlamRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
+}
+
+/* --- Game-over divider fade-in --- */
+.game-over-modal .go-divider {
+  animation: goStatIn 0.3s ease 0.25s both;
 }
