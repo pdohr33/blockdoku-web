@@ -442,6 +442,19 @@
     scoreAnimId = requestAnimationFrame(tick);
   }
 
+  function animateCountUp(el, from, to, duration) {
+    if (to === from) { el.textContent = to; return; }
+    const startTime = performance.now();
+    function tick(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(from + (to - from) * eased);
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
   // ============================================================
   // SIZING
   // ============================================================
@@ -590,6 +603,16 @@
       sfxCombo(comboCount);
     }
 
+    // Perfect clear bonus: board is completely empty
+    const isPerfectClear = board.every(row => row.every(cell => cell === 0));
+    if (isPerfectClear) {
+      pts += 50;
+      spawnConfetti(100);
+      screenFlash("gold");
+      if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 60, 40, 80]);
+      showPerfectClearBanner();
+    }
+
     // Enhanced celebrations based on clear size
     if (totalClears >= 3) {
       // Triple+ clear: confetti + gold flash
@@ -642,6 +665,44 @@
       }
     }
     return false;
+  }
+
+  // ============================================================
+  // HINT SYSTEM — show valid placements for a piece
+  // ============================================================
+  let hintTimeout = null;
+
+  function showHints(piece) {
+    if (!piece || !gameActive) return;
+    const validCells = new Set();
+    for (let r = 0; r < GRID; r++) {
+      for (let c = 0; c < GRID; c++) {
+        if (canPlace(piece, r, c)) {
+          for (const [dr, dc] of piece.cells) {
+            validCells.add((r + dr) * GRID + (c + dc));
+          }
+        }
+      }
+    }
+    if (validCells.size === 0) return;
+
+    // Draw hint highlights on fx-layer
+    const fxCanvas = document.getElementById("fx-layer");
+    const fxCtx = fxCanvas.getContext("2d");
+    fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+    fxCtx.fillStyle = "rgba(108, 200, 255, 0.2)";
+    for (const idx of validCells) {
+      const r = Math.floor(idx / GRID);
+      const c = idx % GRID;
+      fxCtx.fillRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
+    }
+
+    // Auto-clear after 1.5s
+    if (hintTimeout) clearTimeout(hintTimeout);
+    hintTimeout = setTimeout(() => {
+      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+      hintTimeout = null;
+    }, 1500);
   }
 
   // ============================================================
@@ -796,7 +857,7 @@
 
   function dealPieces() {
     pieces = [randomPiece(), randomPiece(), randomPiece()];
-    renderPieces();
+    renderPieces(true);
   }
 
   // ============================================================
@@ -843,7 +904,7 @@
     localStorage.setItem("blockdoku_mode", mode);
   }
 
-  function renderPieces() {
+  function renderPieces(animate = false) {
     const slots = tray.querySelectorAll(".piece-slot");
     slots.forEach((slot, idx) => {
       slot.innerHTML = "";
@@ -851,6 +912,16 @@
 
       if (piece) {
         slot.classList.remove("used");
+        if (animate) {
+          slot.style.opacity = "0";
+          slot.style.transform = "scale(0.5) translateY(10px)";
+          setTimeout(() => {
+            slot.style.transition = "opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)";
+            slot.style.opacity = "1";
+            slot.style.transform = "scale(1) translateY(0)";
+            setTimeout(() => { slot.style.transition = ""; }, 350);
+          }, idx * 100);
+        }
         const pCanvas = document.createElement("canvas");
         const pCtx = pCanvas.getContext("2d");
 
@@ -917,11 +988,17 @@
   let ghostEl = null;
   let lastGhostRow = -999;
   let lastGhostCol = -999;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragMoved = false;
 
   function startDrag(idx, clientX, clientY) {
     if (!pieces[idx] || !gameActive) return;
     dragPiece = pieces[idx];
     dragIdx = idx;
+    dragStartX = clientX;
+    dragStartY = clientY;
+    dragMoved = false;
 
     let sumR = 0, sumC = 0;
     for (const [dr, dc] of dragPiece.cells) { sumR += dr; sumC += dc; }
@@ -951,6 +1028,10 @@
 
   function moveGhost(clientX, clientY) {
     if (!ghostEl) return;
+    // Track if the user actually dragged vs just tapped
+    const dx = clientX - dragStartX;
+    const dy = clientY - dragStartY;
+    if (dx * dx + dy * dy > 100) dragMoved = true;
     // Offset ghost above finger by 2 cells so piece is visible while dragging
     const dragLift = cellSize * 2;
     ghostEl.style.left = (clientX - ghostEl.offsetWidth / 2) + "px";
@@ -978,6 +1059,22 @@
 
   function endDrag(clientX, clientY) {
     if (!dragPiece) return;
+
+    // Tap without dragging: show placement hints
+    if (!dragMoved) {
+      const hintPiece = dragPiece;
+      // Cleanup drag state
+      if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+      const slot = tray.querySelectorAll(".piece-slot")[dragIdx];
+      if (slot) slot.classList.remove("dragging");
+      dragPiece = null;
+      dragIdx = -1;
+      lastGhostRow = -999;
+      lastGhostCol = -999;
+      drawBoard();
+      showHints(hintPiece);
+      return;
+    }
 
     const dragLift = cellSize * 2;
     const rect = canvas.getBoundingClientRect();
@@ -1282,6 +1379,14 @@
     addXP(pts);
   }
 
+  function showPerfectClearBanner() {
+    const el = document.createElement("div");
+    el.className = "perfect-clear-banner";
+    el.textContent = "PERFECT CLEAR! +50";
+    document.getElementById("app").appendChild(el);
+    setTimeout(() => el.remove(), 2000);
+  }
+
   function showFloatScore(pts, x, y, big) {
     const el = document.createElement("div");
     el.className = "float-score" + (big ? " big" : "");
@@ -1313,11 +1418,12 @@
     // not the one addScore() already updated mid-game
     const isNewBest = score > bestScoreAtGameStart && score > 0;
 
-    finalScoreEl.textContent = score;
-    finalBestEl.textContent = bestScore;
-    goLines.textContent = gameStats.linesCleared;
-    goCombos.textContent = gameStats.combos;
-    goPieces.textContent = gameStats.piecesPlaced;
+    // Animate score count-up on game over
+    animateCountUp(finalScoreEl, 0, score, 600);
+    animateCountUp(finalBestEl, 0, bestScore, 600);
+    animateCountUp(goLines, 0, gameStats.linesCleared, 400);
+    animateCountUp(goCombos, 0, gameStats.combos, 400);
+    animateCountUp(goPieces, 0, gameStats.piecesPlaced, 400);
 
     goLevelVal.textContent = playerLevel;
 
