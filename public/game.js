@@ -317,6 +317,11 @@
     setTimeout(() => playTone(base * 1.5, 0.12, "triangle", 0.035), 120);
   }
 
+  // Quick tick sound for game-over score count-up
+  function sfxTick(pitch) {
+    playTone(pitch || 1200, 0.02, "sine", 0.02);
+  }
+
   // ============================================================
   // PARTICLE SYSTEM
   // ============================================================
@@ -743,14 +748,24 @@
     scoreAnimId = requestAnimationFrame(tick);
   }
 
-  function animateCountUp(el, from, to, duration) {
+  function animateCountUp(el, from, to, duration, withSound = false) {
     if (to === from) { el.textContent = to; return; }
     const startTime = performance.now();
+    let lastTickVal = from;
     function tick(now) {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      el.textContent = Math.round(from + (to - from) * eased);
+      const val = Math.round(from + (to - from) * eased);
+      el.textContent = val;
+      // Tick sound every ~10% of value or at least every 50ms-worth of change
+      if (withSound && val !== lastTickVal) {
+        const step = Math.max(1, Math.round((to - from) / 12));
+        if (val - lastTickVal >= step || progress >= 1) {
+          sfxTick(900 + (val / Math.max(to, 1)) * 600);
+          lastTickVal = val;
+        }
+      }
       if (progress < 1) requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -1095,6 +1110,12 @@
     sfxPlace();
     sfxSnap();
     gameStats.piecesPlaced++;
+
+    // Board wrapper pulse on placement
+    const bw = document.getElementById("board-wrapper");
+    bw.classList.remove("placement-pulse");
+    void bw.offsetWidth;
+    bw.classList.add("placement-pulse");
 
     // Radial pulse from placement center
     const tapCells = piece.cells;
@@ -1820,6 +1841,12 @@
       sfxSnap();
       gameStats.piecesPlaced++;
 
+      // Board wrapper pulse on placement
+      const bw = document.getElementById("board-wrapper");
+      bw.classList.remove("placement-pulse");
+      void bw.offsetWidth;
+      bw.classList.add("placement-pulse");
+
       // Radial pulse from placement center
       const pieceCells = dragPiece.cells;
       let centerX = 0, centerY = 0;
@@ -2116,6 +2143,13 @@
       void scoreEl.offsetWidth;
       scoreEl.classList.add("score-pop");
     }
+
+    // Score "warming" — shift text color based on score magnitude
+    scoreEl.classList.remove("score-warm-1", "score-warm-2", "score-warm-3", "score-warm-4");
+    if (score >= 2000) scoreEl.classList.add("score-warm-4");
+    else if (score >= 1000) scoreEl.classList.add("score-warm-3");
+    else if (score >= 500) scoreEl.classList.add("score-warm-2");
+    else if (score >= 200) scoreEl.classList.add("score-warm-1");
     if (scoreBoxEl) {
       scoreBoxEl.classList.remove("score-active");
       void scoreBoxEl.offsetWidth;
@@ -2299,8 +2333,8 @@
     // not the one addScore() already updated mid-game
     const isNewBest = score > bestScoreAtGameStart && score > 0;
 
-    // Animate score count-up on game over
-    animateCountUp(finalScoreEl, 0, score, 600);
+    // Animate score count-up on game over (with tick sound on main score)
+    animateCountUp(finalScoreEl, 0, score, 600, true);
     animateCountUp(finalBestEl, 0, bestScore, 600);
     animateCountUp(goLines, 0, gameStats.linesCleared, 400);
     animateCountUp(goCombos, 0, gameStats.combos, 400);
@@ -2374,6 +2408,7 @@
     undoSnapshot = null;
     btnUndo.disabled = true;
     scoreEl.textContent = "0";
+    scoreEl.classList.remove("score-warm-1", "score-warm-2", "score-warm-3", "score-warm-4");
     hideComboBadge();
     clearConfetti();
     clearHints();

@@ -1764,6 +1764,83 @@ h1 {
   100% { transform: scale(1.06); }
 }
 
+/* ============================================================
+   WAVE 4: Idle breathe, board glow border, ghost trail, warm score
+   ============================================================ */
+
+/* --- Idle piece breathe (subtle float in tray) --- */
+@keyframes pieceBreathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.piece-slot:not(.used):not(.dragging) canvas {
+  animation: pieceBreathe 2.5s ease-in-out infinite;
+}
+
+/* Stagger the breathe so they look organic, not synchronized */
+.piece-slot:nth-child(1):not(.used):not(.dragging) canvas { animation-delay: 0s; }
+.piece-slot:nth-child(2):not(.used):not(.dragging) canvas { animation-delay: 0.8s; }
+.piece-slot:nth-child(3):not(.used):not(.dragging) canvas { animation-delay: 1.6s; }
+
+/* --- Animated border glow on board wrapper --- */
+@keyframes boardBorderShimmer {
+  0%, 100% { border-color: var(--border); }
+  50% { border-color: rgba(108, 140, 255, 0.25); }
+}
+
+#board-wrapper {
+  animation: boardBorderShimmer 6s ease-in-out infinite;
+}
+
+/* --- Ghost piece motion trail --- */
+.drag-ghost::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.3;
+  filter: blur(8px);
+  background: inherit;
+  z-index: -1;
+  transform: translateY(4px) scale(1.05);
+  pointer-events: none;
+}
+
+/* --- Score "warming" — text color shifts warmer as score grows --- */
+.score-box .score-value.score-warm-1 { color: var(--accent); }
+.score-box .score-value.score-warm-2 { color: #a78bfa; }
+.score-box .score-value.score-warm-3 { color: #f59e0b; }
+.score-box .score-value.score-warm-4 { color: #ff3b7a; }
+.score-box.score-is-best .score-value { color: var(--gold) !important; }
+
+/* --- Game-over stat reveal stagger --- */
+.game-over-modal .go-stat {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: goStatIn 0.4s ease both;
+}
+.game-over-modal .go-stat:nth-child(1) { animation-delay: 0.35s; }
+.game-over-modal .go-stat:nth-child(2) { animation-delay: 0.5s; }
+.game-over-modal .go-stat:nth-child(3) { animation-delay: 0.65s; }
+
+/* --- Play Again button entrance --- */
+.game-over-modal .btn-primary {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: goStatIn 0.5s ease 0.8s both;
+}
+
+/* --- Board pulse on piece placement (brief inner glow) --- */
+@keyframes placementPulse {
+  0% { box-shadow: var(--shadow-md), inset 0 0 20px rgba(108, 140, 255, 0.2); }
+  100% { box-shadow: var(--shadow-md); }
+}
+
+#board-wrapper.placement-pulse {
+  animation: placementPulse 0.35s ease-out;
+}
+
 /* --- Reduced motion overrides --- */
 @media (prefers-reduced-motion: reduce) {
   .new-best-live,
@@ -1772,5 +1849,10 @@ h1 {
   .score-box.score-is-best {
     animation: none !important;
     display: none;
+  }
+
+  .piece-slot canvas,
+  #board-wrapper {
+    animation: none !important;
   }
 }
