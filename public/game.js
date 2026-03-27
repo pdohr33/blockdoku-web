@@ -749,19 +749,37 @@
 
     placePiece(piece, placement.row, placement.col);
     sfxPlace();
-    pieces[idx] = null;
     gameStats.piecesPlaced++;
-    checkAndClear();
-    if (pieces.every(p => !p)) dealPieces();
-    renderPieces(pieces.every(p => !!p));
-    drawBoard();
 
-    if (!hasValidMove()) {
-      gameActive = false;
-      setTimeout(gameOver, 400);
-    } else if (gameMode === "classic") {
-      saveState();
+    // Score for placing (mirrors drag path)
+    const placePts = piece.cells.length;
+    addScore(placePts);
+
+    // Check clears
+    const clearPts = checkClears();
+    if (clearPts > 0) {
+      sfxClear(Math.ceil(clearPts / 9));
+      addScore(clearPts);
     }
+
+    pieces[idx] = null;
+    renderPieces();
+
+    // Deal new pieces if all used
+    if (pieces.every(p => p === null)) {
+      undoSnapshot = null; // Can't undo across a new deal
+      btnUndo.disabled = true;
+      dealPieces();
+    }
+
+    // Check game over
+    if (!anyMovePossible()) {
+      gameActive = false;
+      setTimeout(gameOver, 500);
+    }
+
+    saveState();
+    drawBoard();
   });
 
   // ============================================================
