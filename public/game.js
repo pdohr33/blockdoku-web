@@ -126,6 +126,8 @@
   let gameOverShakeTimeoutId = null;
   let gameOverAdPollId = null;
   let gameOverAdSafetyId = null;
+  let gameOverVignetteTimeoutId = null;
+  let gameOverVignetteEl = null;
   let countUpAnimIds = new Set();
 
   // --- Level System ---
@@ -694,6 +696,14 @@
       clearTimeout(gameOverAdSafetyId);
       gameOverAdSafetyId = null;
     }
+    if (gameOverVignetteTimeoutId) {
+      clearTimeout(gameOverVignetteTimeoutId);
+      gameOverVignetteTimeoutId = null;
+    }
+    if (gameOverVignetteEl) {
+      gameOverVignetteEl.remove();
+      gameOverVignetteEl = null;
+    }
     if (gameOverFireworksId) {
       clearInterval(gameOverFireworksId);
       gameOverFireworksId = null;
@@ -702,6 +712,22 @@
       for (const animId of countUpAnimIds) cancelAnimationFrame(animId);
       countUpAnimIds.clear();
     }
+  }
+
+  function clearIdleNudgeState() {
+    if (idleNudgeTimeoutId) {
+      clearTimeout(idleNudgeTimeoutId);
+      idleNudgeTimeoutId = null;
+    }
+    idleNudgeActive = false;
+    for (const slot of tray.querySelectorAll(".piece-slot.idle-nudge")) {
+      slot.classList.remove("idle-nudge");
+    }
+  }
+
+  function registerInteraction(now = performance.now()) {
+    lastInteractionTime = now;
+    clearIdleNudgeState();
   }
 
   function startGameOverFireworks() {
@@ -1107,8 +1133,7 @@
   // Tap-to-place: click a highlighted hint cell to place the piece there
   canvas.addEventListener("click", (e) => {
     if (!hintedPiece || hintedPieceIdx < 0 || !gameActive) return;
-    lastInteractionTime = performance.now();
-    idleNudgeActive = false;
+    registerInteraction();
 
     const rect = canvas.getBoundingClientRect();
     const tapCol = Math.floor((e.clientX - rect.left) / cellSize);
@@ -1220,6 +1245,7 @@
   // Idle nudge state — bounce first available piece after inactivity
   let lastInteractionTime = 0;
   let idleNudgeActive = false;
+  let idleNudgeTimeoutId = null;
 
   // Placement pop state
   let placedCells = []; // [{r, c, time, color}]
@@ -1263,7 +1289,12 @@
             const slot = slots[i];
             if (slot && !slot.classList.contains("used")) {
               slot.classList.add("idle-nudge");
-              setTimeout(() => slot.classList.remove("idle-nudge"), 600);
+              lastInteractionTime = now;
+              idleNudgeTimeoutId = setTimeout(() => {
+                slot.classList.remove("idle-nudge");
+                idleNudgeTimeoutId = null;
+                idleNudgeActive = false;
+              }, 600);
             }
             break; // only nudge the first available
           }
@@ -1804,8 +1835,7 @@
 
   function startDrag(idx, clientX, clientY) {
     if (!pieces[idx] || !gameActive) return;
-    lastInteractionTime = performance.now();
-    idleNudgeActive = false;
+    registerInteraction();
     clearHints();
     dragPiece = pieces[idx];
     dragIdx = idx;
@@ -2382,11 +2412,22 @@
 
     // Dramatic vignette — dark radial overlay that closes in during shatter
     if (!prefersReducedMotion.matches) {
-      const vig = document.createElement("div");
-      vig.className = "game-over-vignette";
-      document.body.appendChild(vig);
+      if (gameOverVignetteTimeoutId) {
+        clearTimeout(gameOverVignetteTimeoutId);
+        gameOverVignetteTimeoutId = null;
+      }
+      if (gameOverVignetteEl) gameOverVignetteEl.remove();
+      gameOverVignetteEl = document.createElement("div");
+      gameOverVignetteEl.className = "game-over-vignette";
+      document.body.appendChild(gameOverVignetteEl);
       // Auto-remove after animation completes
-      setTimeout(() => vig.remove(), 2000);
+      gameOverVignetteTimeoutId = setTimeout(() => {
+        if (gameOverVignetteEl) {
+          gameOverVignetteEl.remove();
+          gameOverVignetteEl = null;
+        }
+        gameOverVignetteTimeoutId = null;
+      }, 2000);
     }
 
     // Board shatter effect: explode cells row-by-row with staggered delay
@@ -2499,8 +2540,7 @@
     lastMilestone = 0;
     hasPassedBestThisGame = false;
     twinkleCells = [];
-    lastInteractionTime = performance.now();
-    idleNudgeActive = false;
+    registerInteraction();
     if (gameOverFireworksId) {
       clearInterval(gameOverFireworksId);
       gameOverFireworksId = null;
@@ -2753,7 +2793,7 @@
 
   // Particle animation loop starts on-demand via ensureAnimRunning()
   // Start ambient shimmer for that alive board feel
-  lastInteractionTime = performance.now();
+  registerInteraction();
   startAmbientShimmer();
   prefersReducedMotion.addEventListener("change", () => {
     if (prefersReducedMotion.matches) {

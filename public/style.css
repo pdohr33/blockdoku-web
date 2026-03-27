@@ -1871,6 +1871,8 @@ h1 {
 
   .piece-slot.idle-nudge {
     animation: none !important;
+    border-color: inherit !important;
+    box-shadow: none !important;
   }
 }
 
